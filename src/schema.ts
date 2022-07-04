@@ -28,13 +28,33 @@ function getpks(x : ddlT) : ({ primary_keys: Array<string>}) {
   return {primary_keys: []};
 }
 
+function columnCast(c: string): ScalarType {
+  switch(c) {
+    case "string":
+    case "number":
+    case "bool":
+      return c as ScalarType;
+    case "integer": return ScalarType.Number
+    case "double": return ScalarType.Number
+    case "float": return ScalarType.Number
+    case "text": return ScalarType.String
+    default:
+      return ScalarType.String
+      // throw new Error(`Couldn't decode SQLite column type 😭 Unexpected value: ${c}`) 
+  }
+}
+
 function getcols(x : ddlT) : Array<ColumnInfo> {
   return x.tables.flatMap(t =>
-    t.columns.map(c => ({
-      name: c.name,
-      type: c.type as unknown as ScalarType, // TODO: This cast is dubious
-      nullable: (!c.notNull)
-    }))
+    t.columns.map((c) => {
+      console.log(t)
+      console.log(c)
+      return ({
+        name: c.name,
+        type: columnCast(c.type), // TODO: This cast is dubious
+        nullable: (!c.notNull)
+      })
+    })
   )
 }
 
