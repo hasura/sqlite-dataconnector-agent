@@ -28,8 +28,8 @@ The schema is exposed via introspection, but you can limit which tables are refe
 ## Docker Build & Run
 
 ```
-> docker build . -t dc-reference-agent:latest
-> docker run -it --rm -p 8100:8100 dc-reference-agent:latest
+> docker build . -t dc-sqlite-agent:latest
+> docker run -it --rm -p 8100:8100 dc-sqlite-agent:latest
 ```
 
 # Dataset
