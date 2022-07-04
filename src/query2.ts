@@ -44,7 +44,7 @@ function bop_op(o: BinaryComparisonOperator): string {
 function bop_val(escapeSQL: EscapeSQL, v: ComparisonValue): string {
   switch(v.type) {
     case "column": return `${bop_col(escapeSQL, v.column)}`;
-    case "scalar": return `${escapeSQL(`${v.value}`)}`; // TODO: escape
+    case "scalar": return `${escapeSQL(`${v.value}`)}`;
   }
 }
 
