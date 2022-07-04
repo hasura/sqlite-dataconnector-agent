@@ -5,7 +5,6 @@ import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, Proje
 import { coerceUndefinedToNull, crossProduct, omap, unreachable, zip } from "./util";
 
 function output(rs: any): Array<ProjectedRow> {
-  console.log("rows",rs);
   return rs;
 }
 
@@ -53,7 +52,7 @@ function binary_op(escapeSQL: EscapeSQL, b: ApplyBinaryComparisonOperatorExpress
 }
 
 function subexpressions(escapeSQL: EscapeSQL, es: Array<Expression>): Array<string> {
-  return es.map((e) => where(escapeSQL, e)).filter(e => e !== "");
+  return es.map((e) => where(escapeSQL, e)).filter(e => e !== ""); // NOTE: This seems fragile.
 }
 
 function junction(escapeSQL: EscapeSQL, es: Array<Expression>, b: string): string {
@@ -66,6 +65,8 @@ function junction(escapeSQL: EscapeSQL, es: Array<Expression>, b: string): strin
 }
 
 function unary_op(escapeSQL: EscapeSQL, u: ApplyUnaryComparisonOperatorExpression): string {
+  // Note: Nested switches could be an issue, but since there is only one unary op,
+  // it should be ok.
   switch(u.type) {
     case "unary_op":
       switch(u.operator) {
@@ -77,14 +78,13 @@ function unary_op(escapeSQL: EscapeSQL, u: ApplyUnaryComparisonOperatorExpressio
 
 function where(escapeSQL: EscapeSQL, w:Expression): string {
   switch(w.type) {
-    case "not": return `NOT (${where(escapeSQL, w.expression)})`;
-    case "and": return junction(escapeSQL, w.expressions, " AND ");
-    case "or": return junction(escapeSQL, w.expressions, " OR ");
-    case "binary_op": return binary_op(escapeSQL, w);
+    case "not":           return `NOT (${where(escapeSQL, w.expression)})`;
+    case "and":           return junction(escapeSQL, w.expressions, " AND ");
+    case "or":            return junction(escapeSQL, w.expressions, " OR ");
+    case "unary_op":      return unary_op(escapeSQL, w);
+    case "binary_op":     return binary_op(escapeSQL, w);
     case "binary_arr_op": // TODO
       return "TODO";
-    case "unary_op":
-      return unary_op(escapeSQL, w);
   }
 }
 
@@ -125,9 +125,9 @@ function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
 
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
   console.log(queryRequest);
-  const db     = connect(config); // TODO: Should this be cached?
+  const db     = connect(config);             // TODO: Should this be cached?
   const esc    = (s: string) => db.escape(s); // TODO: Thread escaper to other functions
-  const q      = query(esc, queryRequest);
+  const q      = query(esc, queryRequest);    // TODO: Could the depth of recursion be a problem?
   const [r, m] = await db.query(q);
   const o      = output(r);
   return o;

@@ -36,3 +36,11 @@ The schema is exposed via introspection, but you can limit which tables are refe
 
 The dataset used for testing the reference agent is sourced from https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
 
+
+# TODO
+
+* [ ] Ensure everything is escaped correctly
+* [ ] Use parameterized queries if possible
+* [ ] Run test-suite from SDK
+* [ ] Remove old queries module
+* [ ] Joins
