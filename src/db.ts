@@ -11,3 +11,7 @@ export function connect(config: Config): Sequelize {
 
   return db;
 };
+
+export function escapeSQL(db: Sequelize, sql: string): string {
+  return db.escape(sql);
+};

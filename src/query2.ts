@@ -1,5 +1,6 @@
-﻿import { Config } from "./config";
-import { connect } from "./db";
+﻿import { Sequelize } from "sequelize/types";
+import { Config } from "./config";
+import { connect, escapeSQL } from "./db";
 import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field, ApplyBinaryComparisonOperatorExpression } from "./types/query";
 import { coerceUndefinedToNull, crossProduct, omap, unreachable, zip } from "./util";
 
@@ -70,9 +71,10 @@ function where(w:Expression): string {
     case "and": return junction(w.expressions, " AND ");
     case "or": return junction(w.expressions, " OR ");
     case "binary_op": return binary_op(w);
-    case "unary_op":
-    case "binary_arr_op":
-    default: return "";
+    case "unary_op": // TODO
+      return "TODO";
+    case "binary_arr_op": // TODO
+      return "TODO";
   }
 }
 
@@ -105,14 +107,17 @@ function offset(r: QueryRequest): string {
   }
 }
 
-function query(r: QueryRequest): string {
-  return `select ${fields(r)} from ${r.table} ${whereN(r.query.where)} ${limit(r)} ${offset(r)}`; // TODO: Escaping
+type EscapeSQL = (s: string) => string
+
+function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
+  return `select ${fields(r)} from ${escapeSQL(r.table)} ${whereN(r.query.where)} ${limit(r)} ${offset(r)}`;
 }
 
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
   console.log(queryRequest);
   const db     = connect(config); // TODO: Should this be cached?
-  const q      = query(queryRequest);
+  const esc    = (s: string) => db.escape(s); // TODO: Thread escaper to other functions
+  const q      = query(esc, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
   return o;
