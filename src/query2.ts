@@ -26,8 +26,24 @@ function where(r: QueryRequest): string {
   return ""; // TODO
 }
 
+function limit(r: QueryRequest): string {
+  if(r.query.limit == null) {
+    return "";
+  } else {
+    return `limit ${r.query.limit}`;
+  }
+}
+
+function offset(r: QueryRequest): string {
+  if(r.query.offset == null) {
+    return "";
+  } else {
+    return `offset ${r.query.offset}`;
+  }
+}
+
 function query(r: QueryRequest): string {
-  return `select ${fields(r)} from ${r.table} ${where(r)}`; // TODO: Escaping
+  return `select ${fields(r)} from ${r.table} ${where(r)} ${limit(r)} ${offset(r)}`; // TODO: Escaping
 }
 
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
@@ -38,3 +54,4 @@ export async function queryData2(config: Config, queryRequest: QueryRequest): Pr
   const o      = output(r);
   return o;
 }
+
