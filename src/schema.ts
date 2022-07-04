@@ -1,22 +1,41 @@
 import { SchemaResponse, ScalarType, Table, ColumnInfo } from "./types/schema"
 import { Config } from "./config";
-
+import { connect } from './db';
 import { Sequelize } from 'sequelize';
-
 const SQLiteDDLParser = require('sqlite-ddl-parser');
 
-type columnT = {name: string, type: string, notNull: boolean, unique: boolean}
+type columnT = {
+  name: string,
+  type: string,
+  notNull: boolean,
+  unique: boolean
+}
 
-type columnOutT = {name: string, type: string, nullable: boolean, description?: string}
+type columnOutT = {
+  name: string,
+  type: string,
+  nullable: boolean,
+  description?: string
+}
 
-type ddlT = {tables: [
-  { name: string,
-    columns: [columnT],
-    primaryKeys: [string]}]
-  }
+type ddlT = {
+  tables: [
+    { name: string,
+      columns: [columnT],
+      primaryKeys: [string]
+    }
+  ]
+}
 
-type resultTT = {name: string, type: string, tbl_name: string, rootpage: Number, sql: string}
-type resultT = resultTT & {ddl: ddlT}
+type resultTT = {
+  name: string,
+  type: string,
+  tbl_name: string,
+  rootpage: Number,
+  sql: string
+}
+
+type resultT = resultTT & { ddl: ddlT }
 
 function getpks(x : ddlT) : ({ primary_keys: Array<string>}) {
   if(x.tables.length > 0) {
@@ -32,14 +51,12 @@ function columnCast(c: string): ScalarType {
   switch(c) {
     case "string":
     case "number":
-    case "bool":
-      return c as ScalarType;
+    case "bool":    return c as ScalarType;
     case "integer": return ScalarType.Number
-    case "double": return ScalarType.Number
-    case "float": return ScalarType.Number
-    case "text": return ScalarType.String
-    default:
-      return ScalarType.String
+    case "double":  return ScalarType.Number
+    case "float":   return ScalarType.Number
+    case "text":    return ScalarType.String
+    default:        return ScalarType.String
       // throw new Error(`Couldn't decode SQLite column type 😭 Unexpected value: ${c}`) 
   }
 }
@@ -83,14 +100,10 @@ function includeTable(config: Config, table: Table): boolean {
 }
 
 export async function getSchema(config: Config): Promise<SchemaResponse> {
-  const db = new Sequelize({
-    dialect: 'sqlite',
-    storage: config.db
-  });
-
+  const db                  = connect(config);
   const [results, metadata] = await db.query("SELECT * from sqlite_schema");
-  const resultsT = results as unknown as Array<resultTT>;
-  const withDDL = resultsT.map(e => ({ddl: SQLiteDDLParser.parse(e.sql) as ddlT, ...e}) );
+  const resultsT            = results as unknown as Array<resultTT>;
+  const withDDL             = resultsT.map(e => ({ddl: SQLiteDDLParser.parse(e.sql) as ddlT, ...e}) );
 
   return {
     tables: withDDL.map(format).filter(table => includeTable(config,table))

@@ -1,9 +1,10 @@
-﻿import Fastify from 'fastify';
-import { SchemaResponse } from './types/schema';
-import { ProjectedRow, QueryRequest } from './types/query';
-import { getSchema } from './schema';
-import { queryData } from './query';
-import { getConfig } from './config';
+﻿import Fastify                                       from 'fastify';
+import { SchemaResponse }                            from './types/schema';
+import { ProjectedRow, QueryRequest }                from './types/query';
+import { getSchema }                                 from './schema';
+import { queryData }                                 from './query';
+import { queryData2 }                                from './query2';
+import { getConfig }                                 from './config';
 import { CapabilitiesResponse, capabilitiesResponse} from './capabilities';
 
 const port = Number(process.env.PORT) || 8100;
@@ -25,7 +26,7 @@ server.post<{ Body: QueryRequest, Reply: ProjectedRow[] }>("/query", async (requ
   server.log.info({ headers: request.headers, query: request.body, }, "query.request");
   const config = getConfig(request);
   // const data = filterAvailableTables(staticData, config);
-  return queryData({}, request.body);
+  return queryData2(config, request.body);
 });
 
 process.on('SIGINT', () => {
