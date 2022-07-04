@@ -34,5 +34,5 @@ The schema is exposed via introspection, but you can limit which tables are refe
 
 # Dataset
 
-The test dataset exposed by the reference agent is sourced from https://www.sqlitetutorial.net/sqlite-sample-database/
+The dataset used for testing the reference agent is sourced from https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
 
