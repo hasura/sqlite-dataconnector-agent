@@ -1,8 +1,8 @@
-﻿import { Sequelize } from "sequelize/types";
-import { Config } from "./config";
-import { connect, escapeSQL } from "./db";
-import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field, ApplyBinaryComparisonOperatorExpression, ApplyUnaryComparisonOperatorExpression } from "./types/query";
-import { coerceUndefinedToNull, crossProduct, omap, unreachable, zip } from "./util";
+﻿import { Config }  from "./config";
+import { connect } from "./db";
+import { omap }    from "./util";
+import { Expression, BinaryComparisonOperator, ProjectedRow, UnaryComparisonOperator, ComparisonValue, QueryRequest, ComparisonColumn, Field, ApplyBinaryComparisonOperatorExpression, ApplyUnaryComparisonOperatorExpression } from "./types/query";
+import { Fields, OrderBy, OrderType, Query, QueryResponse, RelationshipType, ScalarValue, BinaryArrayComparisonOperator, TableName, TableRelationships, Relationship, RelationshipName, } from "./types/query"; // TODO: Remove maybe~
 
 function output(rs: any): Array<ProjectedRow> {
   return rs;
@@ -123,6 +123,26 @@ function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
   return `select ${fields(r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
 }
 
+/** Performs a query and returns results
+ * 
+ * Limitations:
+ * - Binary Array Operations not currently supported.
+ * - Relationship fields not currently supported.
+ * 
+ * The current algorithm is to first create a query, then execute it, returning results.
+ * 
+ * Potential ideas for adding relationship fields:
+ * - Some kind of JSON aggregation similar to Postgres' approach. This doesn't seem to be available in SQLite.
+ * - Process the partial results and enrich them by performing further queries.
+ * - Figure out the full set of tables and joins and execute a minimal set of queries then stitch the results together.
+ * 
+ * The second approach could lead to the classic n+1 problem with many queries being executed, although that
+ * may not be a big problem for a reference implementation, but it would be good to have a strategy to address
+ * this regardless.
+ * 
+ * The third approach is similar to the TS XML Reference implementation and could potentially reuse its algorithm
+ * if desired.
+ */
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
   console.log(queryRequest);
   const db     = connect(config);             // TODO: Should this be cached?
