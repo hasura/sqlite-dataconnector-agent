@@ -1,6 +1,6 @@
 ﻿import { Config } from "./config";
 import { connect } from "./db";
-import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field } from "./types/query";
+import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field, ApplyBinaryComparisonOperatorExpression } from "./types/query";
 import { coerceUndefinedToNull, crossProduct, omap, unreachable, zip } from "./util";
 
 function output(rs: any): Array<ProjectedRow> {
@@ -22,8 +22,71 @@ function fields(r: QueryRequest): string {
   return omap(r.query.fields, field).flatMap(e => e).join(", ");
 }
 
-function where(r: QueryRequest): string {
-  return ""; // TODO
+function bop_col(c: ComparisonColumn): string {
+  if(c.path.length < 1) {
+    return c.name;
+  } else {
+    return c.path.join(".") + "." + c.name;
+  }
+}
+
+function bop_op(o: BinaryComparisonOperator): string {
+  switch(o) {
+    case BinaryComparisonOperator.Equal:              return "=";
+    case BinaryComparisonOperator.GreaterThan:        return ">";
+    case BinaryComparisonOperator.GreaterThanOrEqual: return ">=";
+    case BinaryComparisonOperator.LessThan:           return "<";
+    case BinaryComparisonOperator.LessThanOrEqual:    return "<=";
+  }
+}
+
+function bop_val(v: ComparisonValue): string {
+  switch(v.type) {
+    case "column": return `${v.column}`;
+    case "scalar": return `'${v.value}'`; // TODO: escape
+  }
+}
+
+function binary_op(b: ApplyBinaryComparisonOperatorExpression): string {
+  return `${bop_col(b.column)} ${bop_op(b.operator)} ${bop_val(b.value)}`; // TODO: Validate
+}
+
+function subexpressions(es: Array<Expression>): Array<string> {
+  return es.map(where).filter(e => e !== "");
+}
+
+function junction(es: Array<Expression>, b: string): string {
+  const ss = subexpressions(es);
+  if(ss.length < 1) {
+    return "";
+  } else {
+    return ss.join(b);
+  }
+}
+
+function where(w:Expression): string {
+  switch(w.type) {
+    case "not": return `NOT (${where(w.expression)})`;
+    case "and": return junction(w.expressions, " AND ");
+    case "or": return junction(w.expressions, " OR ");
+    case "binary_op": return binary_op(w);
+    case "unary_op":
+    case "binary_arr_op":
+    default: return "";
+  }
+}
+
+function whereN(w: Expression | null | undefined): string {
+  if(w == null) {
+    return "";
+  } else {
+    const r = where(w);
+    if(r === "") {
+      return "";
+    } else {
+      return `where ${r}`;
+    }
+  }
 }
 
 function limit(r: QueryRequest): string {
@@ -43,7 +106,7 @@ function offset(r: QueryRequest): string {
 }
 
 function query(r: QueryRequest): string {
-  return `select ${fields(r)} from ${r.table} ${where(r)} ${limit(r)} ${offset(r)}`; // TODO: Escaping
+  return `select ${fields(r)} from ${r.table} ${whereN(r.query.where)} ${limit(r)} ${offset(r)}`; // TODO: Escaping
 }
 
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
