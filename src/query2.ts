@@ -1,7 +1,7 @@
 ﻿import { Sequelize } from "sequelize/types";
 import { Config } from "./config";
 import { connect, escapeSQL } from "./db";
-import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field, ApplyBinaryComparisonOperatorExpression } from "./types/query";
+import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName, Field, ApplyBinaryComparisonOperatorExpression, ApplyUnaryComparisonOperatorExpression } from "./types/query";
 import { coerceUndefinedToNull, crossProduct, omap, unreachable, zip } from "./util";
 
 function output(rs: any): Array<ProjectedRow> {
@@ -23,11 +23,11 @@ function fields(r: QueryRequest): string {
   return omap(r.query.fields, field).flatMap(e => e).join(", ");
 }
 
-function bop_col(c: ComparisonColumn): string {
+function bop_col(escapeSQL: EscapeSQL, c: ComparisonColumn): string {
   if(c.path.length < 1) {
     return c.name;
   } else {
-    return c.path.join(".") + "." + c.name;
+    return c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name);
   }
 }
 
@@ -41,23 +41,23 @@ function bop_op(o: BinaryComparisonOperator): string {
   }
 }
 
-function bop_val(v: ComparisonValue): string {
+function bop_val(escapeSQL: EscapeSQL, v: ComparisonValue): string {
   switch(v.type) {
-    case "column": return `${v.column}`;
-    case "scalar": return `'${v.value}'`; // TODO: escape
+    case "column": return `${bop_col(escapeSQL, v.column)}`;
+    case "scalar": return `${escapeSQL(`${v.value}`)}`; // TODO: escape
   }
 }
 
-function binary_op(b: ApplyBinaryComparisonOperatorExpression): string {
-  return `${bop_col(b.column)} ${bop_op(b.operator)} ${bop_val(b.value)}`; // TODO: Validate
+function binary_op(escapeSQL: EscapeSQL, b: ApplyBinaryComparisonOperatorExpression): string {
+  return `${bop_col(escapeSQL, b.column)} ${bop_op(b.operator)} ${bop_val(escapeSQL, b.value)}`; // TODO: Validate
 }
 
-function subexpressions(es: Array<Expression>): Array<string> {
-  return es.map(where).filter(e => e !== "");
+function subexpressions(escapeSQL: EscapeSQL, es: Array<Expression>): Array<string> {
+  return es.map((e) => where(escapeSQL, e)).filter(e => e !== "");
 }
 
-function junction(es: Array<Expression>, b: string): string {
-  const ss = subexpressions(es);
+function junction(escapeSQL: EscapeSQL, es: Array<Expression>, b: string): string {
+  const ss = subexpressions(escapeSQL, es);
   if(ss.length < 1) {
     return "";
   } else {
@@ -65,24 +65,34 @@ function junction(es: Array<Expression>, b: string): string {
   }
 }
 
-function where(w:Expression): string {
-  switch(w.type) {
-    case "not": return `NOT (${where(w.expression)})`;
-    case "and": return junction(w.expressions, " AND ");
-    case "or": return junction(w.expressions, " OR ");
-    case "binary_op": return binary_op(w);
-    case "unary_op": // TODO
-      return "TODO";
-    case "binary_arr_op": // TODO
-      return "TODO";
+function unary_op(escapeSQL: EscapeSQL, u: ApplyUnaryComparisonOperatorExpression): string {
+  switch(u.type) {
+    case "unary_op":
+      switch(u.operator) {
+        case UnaryComparisonOperator.IsNull:
+          return `${bop_col(escapeSQL, u.column)} IS NULL`;
+      }
   }
 }
 
-function whereN(w: Expression | null | undefined): string {
+function where(escapeSQL: EscapeSQL, w:Expression): string {
+  switch(w.type) {
+    case "not": return `NOT (${where(escapeSQL, w.expression)})`;
+    case "and": return junction(escapeSQL, w.expressions, " AND ");
+    case "or": return junction(escapeSQL, w.expressions, " OR ");
+    case "binary_op": return binary_op(escapeSQL, w);
+    case "binary_arr_op": // TODO
+      return "TODO";
+    case "unary_op": // TODO
+      return unary_op(escapeSQL, w);
+  }
+}
+
+function whereN(escapeSQL: EscapeSQL, w: Expression | null | undefined): string {
   if(w == null) {
     return "";
   } else {
-    const r = where(w);
+    const r = where(escapeSQL, w);
     if(r === "") {
       return "";
     } else {
@@ -110,7 +120,7 @@ function offset(r: QueryRequest): string {
 type EscapeSQL = (s: string) => string
 
 function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
-  return `select ${fields(r)} from ${escapeSQL(r.table)} ${whereN(r.query.where)} ${limit(r)} ${offset(r)}`;
+  return `select ${fields(r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
 }
 
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
