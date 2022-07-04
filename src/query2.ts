@@ -83,7 +83,7 @@ function where(escapeSQL: EscapeSQL, w:Expression): string {
     case "binary_op": return binary_op(escapeSQL, w);
     case "binary_arr_op": // TODO
       return "TODO";
-    case "unary_op": // TODO
+    case "unary_op":
       return unary_op(escapeSQL, w);
   }
 }
