@@ -8,7 +8,6 @@ import { CapabilitiesResponse, capabilitiesResponse} from './capabilities';
 
 const port = Number(process.env.PORT) || 8100;
 const server = Fastify({ logger: { prettyPrint: true } });
-let staticData = {};
 
 server.get<{ Reply: CapabilitiesResponse }>("/capabilities", async (request, _response) => {
   server.log.info({ headers: request.headers, query: request.body, }, "capabilities.request");
@@ -24,7 +23,6 @@ server.get<{ Reply: SchemaResponse }>("/schema", async (request, _response) => {
 server.post<{ Body: QueryRequest, Reply: ProjectedRow[] }>("/query", async (request, _response) => {
   server.log.info({ headers: request.headers, query: request.body, }, "query.request");
   const config = getConfig(request);
-  // const data = filterAvailableTables(staticData, config);
   return queryData(config, request.body);
 });
 
@@ -35,7 +33,6 @@ process.on('SIGINT', () => {
 
 const start = async () => {
   try {
-    // staticData = await loadStaticData();
     await server.listen(port, "0.0.0.0");
   }
   catch (err) {
