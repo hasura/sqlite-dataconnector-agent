@@ -295,7 +295,7 @@ function output(rs: any): Array<ProjectedRow> {
  *   Artist(limit: 5, order_by: {ArtistId: asc}, where: {Name: {_neq: "Accept"}, _and: {Name: {_is_null: false}}}) {
  *     ArtistId
  *     Name
- *     Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "poo"}}) {
+ *     Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "foo"}}) {
  *       AlbumId
  *       Title
  *       ArtistId
