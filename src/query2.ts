@@ -133,6 +133,8 @@ function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
  * 
  * Potential ideas for adding relationship fields:
  * - Some kind of JSON aggregation similar to Postgres' approach. This doesn't seem to be available in SQLite.
+ *     - 4.13. The json_group_array() and json_group_object() aggregate SQL functions
+ *     - https://www.sqlite.org/json1.html#jgrouparray
  * - Process the partial results and enrich them by performing further queries.
  * - Figure out the full set of tables and joins and execute a minimal set of queries then stitch the results together.
  * 
