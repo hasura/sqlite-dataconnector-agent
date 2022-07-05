@@ -5,6 +5,9 @@ This directory contains an SQLite implementation of a data connector agent.
 ## Requirements
 
 * NodeJS 16
+* SQLite `>= 3.38.0` or compiled in JSON support
+    * Required for the json_group_array() and json_group_object() aggregate SQL functions
+    * https://www.sqlite.org/json1.html#jgrouparray
 
 ## Build & Run
 
@@ -43,4 +46,5 @@ The dataset used for testing the reference agent is sourced from https://raw.git
 * [ ] Use parameterized queries if possible
 * [ ] Run test-suite from SDK
 * [ ] Remove old queries module
-* [ ] Joins
+* [ ] Relationships / Joins
+* [ ] Rename `resultTT` and other badly named types in the `schema.ts` module

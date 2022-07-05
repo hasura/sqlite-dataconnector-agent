@@ -1,25 +1,152 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
 import { omap }    from "./util";
-import { Expression, BinaryComparisonOperator, ProjectedRow, UnaryComparisonOperator, ComparisonValue, QueryRequest, ComparisonColumn, Field, ApplyBinaryComparisonOperatorExpression, ApplyUnaryComparisonOperatorExpression } from "./types/query";
-import { Fields, OrderBy, OrderType, Query, QueryResponse, RelationshipType, ScalarValue, BinaryArrayComparisonOperator, TableName, TableRelationships, Relationship, RelationshipName, } from "./types/query"; // TODO: Remove maybe~
+import {
+    Expression,
+    BinaryComparisonOperator,
+    ProjectedRow,
+    UnaryComparisonOperator,
+    ComparisonValue,
+    QueryRequest,
+    ComparisonColumn,
+    ApplyBinaryComparisonOperatorExpression,
+    ApplyUnaryComparisonOperatorExpression,
+    TableRelationships,
+    Relationship,
+    RelationshipField,
+    RelationshipType,
+    Field,
+    BinaryArrayComparisonOperator,
+    Fields, 
+  } from "./types/query";
 
-function output(rs: any): Array<ProjectedRow> {
-  return rs;
+// function array_relationship_object(rs: Array<TableRelationships>, k: string, v: Field): string {
+//   console.log("array_relationship_object", k, v);
+
+//   switch(v.type) {
+//     case "column":
+//       return `'${k}', ${v.column}`;
+//     case "relationship":
+//       console.log("Sub-field relationships not supported yet", k, v, v.query.fields);
+//       return `'${k}', ${fields2(rs, v.query.field)}`;
+//   }
+// }
+
+function array_relationship_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
+  return omap(fs, (k,v) => {
+    switch(v.type) {
+      case "column":
+        return [`'${k}', ${v.column}`];
+      case "relationship":
+        return rs.flatMap((x) => {
+          if(x.source_table === t) {
+            const rel = x.relationships[v.relationship];
+            if(rel) {
+              return [`'${k}', ${relationship(rs, rel, v, t)}`];
+            }
+          }
+          console.log("Couldn't find relationship for field", k, v, rs);
+          return [];
+        })
+    }
+  }).flatMap((e) => e).join(", ");
 }
 
-function field(k: string, v: Field): Array<string> {
-  switch(v.type) {
-    case "column":
-      return [`${k} as ${v.column}`];
-    case "relationship":
-      console.log("relationships not supported yet", k, v);
-      return [];
+function array_relationship_where(w: Expression | null | undefined): Array<string> {
+  if(w == null) {
+    return [];
+  } else {
+    switch(w.type) {
+      case "not":
+        const aNot = array_relationship_where(w.expression);
+        if(aNot.length > 0) {
+          return [`(NOT ${aNot})`];
+        }
+        break;
+      case "and":
+        const aAnd = w.expressions.flatMap(array_relationship_where);
+        if(aAnd.length > 0) {
+          return [`(${aAnd.join(" AND ")})`];
+        }
+        break;
+      case "or":
+        const aOr = w.expressions.flatMap(array_relationship_where);
+        if(aOr.length > 0) {
+          return [`(${aOr.join(" OR ")})`];
+        }
+        break;
+      case "unary_op":
+        switch(w.operator) {
+          case UnaryComparisonOperator.IsNull:
+            return [`(${bop_col2(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
+        }
+      case "binary_op":
+        const bop = bop_op(w.operator);
+        return [`${bop_col2(w.column)} ${bop} ${bop_val2(w.value)}`];
+      case "binary_arr_op":
+        console.log("binary_op",w)
+        const bopA = bop_array(w.operator);
+        return [`(${bop_col2(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
+    }
+    return [];
   }
 }
 
-function fields(r: QueryRequest): string {
-  return omap(r.query.fields, field).flatMap(e => e).join(", ");
+function relationship(rs: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
+  // (select json_group_array(json_object('Title', Album.Title)) from Album where Album.ArtistId = Artist.ArtistId) as J
+
+  console.log("relationship", f, r);
+
+  switch(r.relationship_type) {
+    // TODO: Query where clause etc.
+    case RelationshipType.Object:
+      console.log("Object relationships not supported yet", r, f, t);
+      return "oops";
+      // return `(select json_object(${object_relationship()}))`;
+
+    case RelationshipType.Array:
+      const wJoin   = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
+      const wFilter = array_relationship_where(f.query.where);
+      // TODO: Ensure that the table prefixes are correct - currently assuming it's from "parent" to "child"
+      return `
+        (select json_group_array(json_object(${array_relationship_object(rs, f.query.fields, r.target_table)}))
+          from ${r.target_table}
+          where ${[...wJoin, ...wFilter].join(" AND ")})
+      `;
+      // return `
+      //   (select json_group_array(json_object(${omap(f.query.fields, (k,v) => array_relationship_object(rs,k,v)).join(", ")}))
+      //     from ${r.target_table}
+      //     where ${[...wJoin, ...wFilter].join(" AND ")})
+      // `;
+  }
+}
+
+function fields(rs: Array<TableRelationships>, r: QueryRequest): string {
+  return omap(r.query.fields, (k,v) => {
+    switch(v.type) {
+      case "column":
+        return [`${v.column} as ${k}`];
+      case "relationship": // TODO: What if there's more than one table relationship? Currently just includes all of them!
+        return rs.flatMap((x) => {
+          if(x.source_table === r.table) {
+            const rel = x.relationships[v.relationship];
+            if(rel) {
+              return [`${relationship(rs, rel, v, r.table)} as ${k}`];
+            }
+          }
+          console.log("Couldn't find relationship for field", k, v, rs);
+          return [];
+        })
+    }
+  }).flatMap((e) => e).join(", ");
+}
+
+function bop_col2(c: ComparisonColumn): string {
+  if(c.path.length < 1) {
+    return c.name;
+  } else {
+    return c.path.join(".") + "." + c.name;
+  }
 }
 
 function bop_col(escapeSQL: EscapeSQL, c: ComparisonColumn): string {
@@ -27,6 +154,13 @@ function bop_col(escapeSQL: EscapeSQL, c: ComparisonColumn): string {
     return c.name;
   } else {
     return c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name);
+  }
+}
+
+function bop_array(o: BinaryArrayComparisonOperator): string {
+  switch(o) {
+    case BinaryArrayComparisonOperator.In:
+      return "IN";
   }
 }
 
@@ -44,6 +178,18 @@ function bop_val(escapeSQL: EscapeSQL, v: ComparisonValue): string {
   switch(v.type) {
     case "column": return `${bop_col(escapeSQL, v.column)}`;
     case "scalar": return `${escapeSQL(`${v.value}`)}`;
+  }
+}
+
+function bop_val2(v: ComparisonValue): string {
+  switch(v.type) {
+    case "column": return `${bop_col2(v.column)}`;
+    case "scalar":
+      if(typeof v.value == "number") {
+        return `${v.value}`;
+      } else {
+        return `'${v.value}'`;
+      }
   }
 }
 
@@ -119,8 +265,12 @@ function offset(r: QueryRequest): string {
 
 type EscapeSQL = (s: string) => string
 
-function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
-  return `select ${fields(r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
+function query(t: Array<TableRelationships>, escapeSQL: EscapeSQL, r: QueryRequest): string {
+  return `select ${fields(t, r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
+}
+
+function output(rs: any): Array<ProjectedRow> {
+  return rs;
 }
 
 /** Performs a query and returns results
@@ -144,12 +294,32 @@ function query(escapeSQL: EscapeSQL, r: QueryRequest): string {
  * 
  * The third approach is similar to the TS XML Reference implementation and could potentially reuse its algorithm
  * if desired.
+ * 
+ * Example of a test query:
+ * 
+ * ```
+ * query MyQuery {
+ *   Artist(limit: 5, order_by: {ArtistId: asc}, where: {Name: {_neq: "Accept"}, _and: {Name: {_is_null: false}}}) {
+ *     ArtistId
+ *     Name
+ *     Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "poo"}}) {
+ *       AlbumId
+ *       Title
+ *       ArtistId
+ *       Tracks {
+ *         Name
+ *         TrackId
+ *       }
+ *     }
+ *   }
+ * }
+ * ```
  */
 export async function queryData2(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
   console.log(queryRequest);
   const db     = connect(config);             // TODO: Should this be cached?
   const esc    = (s: string) => db.escape(s); // TODO: Thread escaper to other functions
-  const q      = query(esc, queryRequest);    // TODO: Could the depth of recursion be a problem?
+  const q      = query(queryRequest.table_relationships, esc, queryRequest);    // TODO: Could the depth of recursion be a problem?
   const [r, m] = await db.query(q);
   const o      = output(r);
   return o;
