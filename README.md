@@ -46,5 +46,5 @@ The dataset used for testing the reference agent is sourced from https://raw.git
 * [ ] Use parameterized queries if possible
 * [ ] Run test-suite from SDK
 * [ ] Remove old queries module
-* [ ] Relationships / Joins
+* [x] Relationships / Joins
 * [ ] Rename `resultTT` and other badly named types in the `schema.ts` module

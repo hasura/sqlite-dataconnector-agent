@@ -276,24 +276,17 @@ function output(rs: any): Array<ProjectedRow> {
 /** Performs a query and returns results
  * 
  * Limitations:
+ * 
  * - Binary Array Operations not currently supported.
  * - Relationship fields not currently supported.
  * 
  * The current algorithm is to first create a query, then execute it, returning results.
  * 
- * Potential ideas for adding relationship fields:
+ * Method for adding relationship fields:
+ * 
  * - Some kind of JSON aggregation similar to Postgres' approach. This doesn't seem to be available in SQLite.
  *     - 4.13. The json_group_array() and json_group_object() aggregate SQL functions
  *     - https://www.sqlite.org/json1.html#jgrouparray
- * - Process the partial results and enrich them by performing further queries.
- * - Figure out the full set of tables and joins and execute a minimal set of queries then stitch the results together.
- * 
- * The second approach could lead to the classic n+1 problem with many queries being executed, although that
- * may not be a big problem for a reference implementation, but it would be good to have a strategy to address
- * this regardless.
- * 
- * The third approach is similar to the TS XML Reference implementation and could potentially reuse its algorithm
- * if desired.
  * 
  * Example of a test query:
  * 
