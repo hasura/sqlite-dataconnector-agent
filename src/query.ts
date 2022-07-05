@@ -1,329 +1,320 @@
-﻿import { Expression, Fields, BinaryComparisonOperator, OrderBy, OrderType, ProjectedRow, Query, QueryResponse, RelationshipType, ScalarValue, UnaryComparisonOperator, ComparisonValue, BinaryArrayComparisonOperator, QueryRequest, TableName, ComparisonColumn, TableRelationships, Relationship, RelationshipName } from "./types/query";
-import { coerceUndefinedToNull, crossProduct, unreachable, zip } from "./util";
+﻿import { Config }  from "./config";
+import { connect } from "./db";
+import { omap }    from "./util";
+import {
+    Expression,
+    BinaryComparisonOperator,
+    ProjectedRow,
+    UnaryComparisonOperator,
+    ComparisonValue,
+    QueryRequest,
+    ComparisonColumn,
+    ApplyBinaryComparisonOperatorExpression,
+    ApplyUnaryComparisonOperatorExpression,
+    TableRelationships,
+    Relationship,
+    RelationshipField,
+    RelationshipType,
+    Field,
+    BinaryArrayComparisonOperator,
+    Fields, 
+  } from "./types/query";
 
-type StaticData = {
-  [tableName: string]: Record<string, ScalarValue>[]
-}
+// function array_relationship_object(rs: Array<TableRelationships>, k: string, v: Field): string {
+//   console.log("array_relationship_object", k, v);
 
-const prettyPrintBinaryComparisonOperator = (operator: BinaryComparisonOperator): string => {
-  switch (operator) {
-    case BinaryComparisonOperator.GreaterThan: return ">";
-    case BinaryComparisonOperator.GreaterThanOrEqual: return ">=";
-    case BinaryComparisonOperator.LessThan: return "<";
-    case BinaryComparisonOperator.LessThanOrEqual: return "<=";
-    case BinaryComparisonOperator.Equal: return "==";
-    default: return unreachable(operator);
-  };
-};
+//   switch(v.type) {
+//     case "column":
+//       return `'${k}', ${v.column}`;
+//     case "relationship":
+//       console.log("Sub-field relationships not supported yet", k, v, v.query.fields);
+//       return `'${k}', ${fields2(rs, v.query.field)}`;
+//   }
+// }
 
-const prettyPrintBinaryArrayComparisonOperator = (operator: BinaryArrayComparisonOperator): string => {
-  switch (operator) {
-    case BinaryArrayComparisonOperator.In: return "IN";
-    default: return unreachable(operator);
-  };
-};
-
-const prettyPrintUnaryComparisonOperator = (operator: UnaryComparisonOperator): string => {
-  switch (operator) {
-    case UnaryComparisonOperator.IsNull: return "IS NULL";
-    default: return unreachable(operator);
-  };
-};
-
-const getBinaryComparisonOperatorEvaluator = (operator: BinaryComparisonOperator): ((left: ScalarValue, right: ScalarValue) => boolean) => {
-  switch (operator) {
-    case BinaryComparisonOperator.GreaterThan: return (a, b) => a !== null && b !== null && a > b;
-    case BinaryComparisonOperator.GreaterThanOrEqual: return (a, b) => a !== null && b !== null && a >= b;
-    case BinaryComparisonOperator.LessThan: return (a, b) => a !== null && b !== null && a < b;
-    case BinaryComparisonOperator.LessThanOrEqual: return (a, b) => a !== null && b !== null && a <= b;
-    case BinaryComparisonOperator.Equal: return (a, b) => a !== null && b !== null && a === b;
-    default: return unreachable(operator);
-  };
-};
-
-const getBinaryArrayComparisonOperatorEvaluator = (operator: BinaryArrayComparisonOperator): ((left: ScalarValue, right: ScalarValue[]) => boolean) => {
-  switch (operator) {
-    case BinaryArrayComparisonOperator.In: return (a, bs) => a !== null && bs.includes(a);
-    default: return unreachable(operator);
-  };
-};
-
-
-const getUnaryComparisonOperatorEvaluator = (operator: UnaryComparisonOperator): ((value: ScalarValue) => boolean) => {
-  switch (operator) {
-    case UnaryComparisonOperator.IsNull: return (v) => v === null;
-    default: return unreachable(operator);
-  };
-};
-
-const prettyPrintComparisonColumn = (comparisonColumn: ComparisonColumn): string => {
-  return comparisonColumn.path.concat(comparisonColumn.name).map(p => `[${p}]`).join(".");
-}
-
-const prettyPrintComparisonValue = (comparisonValue: ComparisonValue): string => {
-  switch (comparisonValue.type) {
-    case "column":
-      return prettyPrintComparisonColumn(comparisonValue.column);
-    case "scalar":
-      return comparisonValue.value === null ? "null" : comparisonValue.value.toString();
-    default:
-      return unreachable(comparisonValue["type"]);
-  }
-}
-
-export const prettyPrintExpression = (e: Expression): string => {
-  switch (e.type) {
-    case "and":
-      return e.expressions.length
-        ? `(${e.expressions.map(prettyPrintExpression).join(" && ")})`
-        : "true";
-    case "or":
-      return e.expressions.length
-        ? `(${e.expressions.map(prettyPrintExpression).join(" || ")})`
-        : "false";
-    case "not":
-      return `!(${prettyPrintExpression(e.expression)})`;
-    case "binary_op":
-      return `([${prettyPrintComparisonColumn(e.column)}] ${prettyPrintBinaryComparisonOperator(e.operator)} ${prettyPrintComparisonValue(e.value)})`;
-    case "binary_arr_op":
-      return `([${prettyPrintComparisonColumn(e.column)}] ${prettyPrintBinaryArrayComparisonOperator(e.operator)} (${e.values.join(", ")}))`;
-    case "unary_op":
-      return `([${prettyPrintComparisonColumn(e.column)}] ${prettyPrintUnaryComparisonOperator(e.operator)})`;
-    default:
-      return unreachable(e["type"]);
-  }
-};
-
-const areComparingColumnsOnSameTable = (comparisonColumn: ComparisonColumn, comparisonValue: ComparisonValue): boolean => {
-  if (comparisonValue.type === "scalar")
-    return false;
-  if (comparisonColumn.path.length !== comparisonValue.column.path.length)
-    return false;
-  return zip(comparisonColumn.path, comparisonValue.column.path).every(([p1, p2]) => p1 === p2);
-};
-
-const makeFilterPredicate = (expression: Expression | null, getComparisonColumnValues: (comparisonColumn: ComparisonColumn, row: Record<string, ScalarValue>) => ScalarValue[]) => (row: Record<string, ScalarValue>) => {
-  const extractComparisonValueScalars = (comparisonValue: ComparisonValue): ScalarValue[] => {
-    switch (comparisonValue.type) {
+function array_relationship_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
+  return omap(fs, (k,v) => {
+    switch(v.type) {
       case "column":
-        return getComparisonColumnValues(comparisonValue.column, row);
-      case "scalar":
-        return [comparisonValue.value];
-      default:
-        return unreachable(comparisonValue["type"]);
-    }
-  }
-
-  const evaluate = (e: Expression): boolean => {
-    switch (e.type) {
-      case "and":
-        return e.expressions.map(evaluate).reduce((b1, b2) => b1 && b2, true);
-      case "or":
-        return e.expressions.map(evaluate).reduce((b1, b2) => b1 || b2, false);
-      case "not":
-        return !evaluate(e.expression);
-      case "binary_op":
-        const binOpColumnVals = getComparisonColumnValues(e.column, row);
-        const binOpComparisonVals = extractComparisonValueScalars(e.value);
-        const comparisonPairs =
-          areComparingColumnsOnSameTable(e.column, e.value)
-            ? zip(binOpColumnVals, binOpComparisonVals)
-            : crossProduct(binOpColumnVals, binOpComparisonVals);
-        return comparisonPairs.some(([columnVal, comparisonVal]) => getBinaryComparisonOperatorEvaluator(e.operator)(columnVal, comparisonVal));
-      case "binary_arr_op":
-        const inColumnVals = getComparisonColumnValues(e.column, row);
-        return inColumnVals.some(columnVal => getBinaryArrayComparisonOperatorEvaluator(e.operator)(columnVal, e.values));
-      case "unary_op":
-        const unOpColumnVals = getComparisonColumnValues(e.column, row);
-        return unOpColumnVals.some(columnVal => getUnaryComparisonOperatorEvaluator(e.operator)(columnVal));
-      default:
-        return unreachable(e["type"]);
-    }
-  }
-  return expression ? evaluate(expression) : true;
-};
-
-const sortRows = (rows: Record<string, ScalarValue>[], orderBy: OrderBy[]): Record<string, ScalarValue>[] =>
-  rows.sort((lhs, rhs) =>
-    orderBy.reduce((accum, { column, ordering }) => {
-      if (accum !== 0) {
-        return accum;
-      }
-      const leftVal: ScalarValue = coerceUndefinedToNull(lhs[column]);
-      const rightVal: ScalarValue = coerceUndefinedToNull(rhs[column]);
-      const compared =
-        leftVal === null
-          ? 1
-          : rightVal === null
-            ? -1
-            : leftVal === rightVal
-              ? 0
-              : leftVal < rightVal
-                ? -1
-                : 1;
-
-      return ordering === OrderType.Descending ? -compared : compared;
-    }, 0)
-  );
-
-const paginateRows = (rows: Record<string, ScalarValue>[], offset: number | null, limit: number | null): Record<string, ScalarValue>[] => {
-  const start = offset ?? 0;
-  const end = limit ? start + limit : rows.length;
-  return rows.slice(start, end);
-};
-
-const makeFindRelationship = (allTableRelationships: TableRelationships[], tableName: TableName) => (relationshipName: RelationshipName): Relationship => {
-  const relationship = allTableRelationships.find(r => r.source_table === tableName)?.relationships?.[relationshipName];
-  if (relationship === undefined)
-    throw `No relationship named ${relationshipName} found for table ${tableName}`;
-  else
-    return relationship;
-};
-
-const createFilterExpressionForRelationshipJoin = (row: Record<string, ScalarValue>, relationship: Relationship): Expression | null => {
-  const columnMappings = Object.entries(relationship.column_mapping);
-  const filterConditions: Expression[] = columnMappings
-    .map(([outerColumnName, innerColumnName]): [ScalarValue, string] => [row[outerColumnName], innerColumnName])
-    .filter((x): x is [ScalarValue, string] => {
-      const [outerValue, _] = x;
-      return outerValue !== null;
-    })
-    .map(([outerValue, innerColumnName]) => {
-      return {
-        type: "binary_op",
-        operator: BinaryComparisonOperator.Equal,
-        column: {
-          path: [],
-          name: innerColumnName,
-        },
-        value: { type: "scalar", value: outerValue }
-      };
-    });
-
-  if (columnMappings.length === 0 || filterConditions.length !== columnMappings.length) {
-    return null;
-  } else {
-    return { type: "and", expressions: filterConditions }
-  }
-};
-
-const addRelationshipFilterToQuery = (row: Record<string, ScalarValue>, relationship: Relationship, subquery: Query): Query | null => {
-  const filterExpression = createFilterExpressionForRelationshipJoin(row, relationship);
-
-  // If we have no columns to join on, or if some of the FK columns in the row contained null, then we can't join
-  if (filterExpression === null) {
-    return null;
-  } else {
-    const existingFilters = subquery.where ? [subquery.where] : []
-    return {
-      ...subquery,
-      where: { type: "and", expressions: [filterExpression, ...existingFilters] }
-    };
-  }
-};
-
-const buildFieldsForPathedComparisonColumn = (comparisonColumn: ComparisonColumn): Fields => {
-  const [relationshipName, ...remainingPath] = comparisonColumn.path;
-  if (relationshipName === undefined) {
-    return {
-      [comparisonColumn.name]: { type: "column", column: comparisonColumn.name }
-    };
-  } else {
-    const innerComparisonColumn = { ...comparisonColumn, path: remainingPath };
-    return {
-      [relationshipName]: { type: "relationship", relationship: relationshipName, query: { fields: buildFieldsForPathedComparisonColumn(innerComparisonColumn) } }
-    };
-  }
-};
-
-const extractScalarValuesFromFieldPath = (fieldPath: string[], value: ProjectedRow | ScalarValue | ProjectedRow[]): ScalarValue[] => {
-  const [fieldName, ...remainingPath] = fieldPath;
-  if (fieldName === undefined) {
-    if (value !== null && typeof value === "object") { // Yes, the typeof of null and arrays is "object" 😑
-      throw "Field path did not end in a ScalarValue";
-    } else {
-      return [value]; // ScalarValues
-    }
-  } else {
-    if (value === null) { // This can occur with optional object relationships
-      return [];
-    } else if (Array.isArray(value)) {
-      return value.flatMap(row => extractScalarValuesFromFieldPath(fieldPath, row));
-    } else if (typeof value === "object") {
-      return extractScalarValuesFromFieldPath(remainingPath, value[fieldName]);
-    } else {
-      throw `Found a ScalarValue in the middle of a field path: ${fieldPath}`;
-    }
-  }
-};
-
-const makeGetComparisonColumnValues = (findRelationship: (relationshipName: RelationshipName) => Relationship, performQuery: (tableName: TableName, query: Query) => ProjectedRow[]) => (comparisonColumn: ComparisonColumn, row: Record<string, ScalarValue>): ScalarValue[] => {
-  const [relationshipName, ...remainingPath] = comparisonColumn.path;
-  if (relationshipName === undefined) {
-    return [coerceUndefinedToNull(row[comparisonColumn.name])];
-  } else {
-    const relationship = findRelationship(relationshipName);
-    const query: Query = { fields: buildFieldsForPathedComparisonColumn({ ...comparisonColumn, path: remainingPath }) };
-    const subquery = addRelationshipFilterToQuery(row, relationship, query);
-
-    if (subquery === null) {
-      return [];
-    } else {
-      const rows = performQuery(relationship.target_table, subquery);
-      const fieldPath = remainingPath.concat(comparisonColumn.name);
-      return rows.flatMap(row => extractScalarValuesFromFieldPath(fieldPath, row));
-    }
-  }
-};
-
-const projectRow = (fields: Fields, findRelationship: (relationshipName: RelationshipName) => Relationship, performQuery: (tableName: TableName, query: Query) => ProjectedRow[]) => (row: Record<string, ScalarValue>): ProjectedRow => {
-  const projectedRow: ProjectedRow = {};
-  for (const [fieldName, field] of Object.entries(fields)) {
-
-    switch (field.type) {
-      case "column":
-        projectedRow[fieldName] = coerceUndefinedToNull(row[field.column]);
-        break;
-
+        return [`'${k}', ${v.column}`];
       case "relationship":
-        const relationship = findRelationship(field.relationship);
-        const subquery = addRelationshipFilterToQuery(row, relationship, field.query);
-        switch (relationship.relationship_type) {
-          case RelationshipType.Object:
-            projectedRow[fieldName] = subquery ? coerceUndefinedToNull(performQuery(relationship.target_table, subquery)[0]) : null;
-            break;
+        return rs.flatMap((x) => {
+          if(x.source_table === t) {
+            const rel = x.relationships[v.relationship];
+            if(rel) {
+              return [`'${k}', ${relationship(rs, rel, v, t)}`];
+            }
+          }
+          console.log("Couldn't find relationship for field", k, v, rs);
+          return [];
+        })
+    }
+  }).flatMap((e) => e).join(", ");
+}
 
-          case RelationshipType.Array:
-            projectedRow[fieldName] = subquery ? performQuery(relationship.target_table, subquery) : [];
-            break;
-
-          default:
-            unreachable(relationship.relationship_type);
-            break;
+function array_relationship_where(w: Expression | null | undefined): Array<string> {
+  if(w == null) {
+    return [];
+  } else {
+    switch(w.type) {
+      case "not":
+        const aNot = array_relationship_where(w.expression);
+        if(aNot.length > 0) {
+          return [`(NOT ${aNot})`];
         }
         break;
+      case "and":
+        const aAnd = w.expressions.flatMap(array_relationship_where);
+        if(aAnd.length > 0) {
+          return [`(${aAnd.join(" AND ")})`];
+        }
+        break;
+      case "or":
+        const aOr = w.expressions.flatMap(array_relationship_where);
+        if(aOr.length > 0) {
+          return [`(${aOr.join(" OR ")})`];
+        }
+        break;
+      case "unary_op":
+        switch(w.operator) {
+          case UnaryComparisonOperator.IsNull:
+            return [`(${bop_col2(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
+        }
+      case "binary_op":
+        const bop = bop_op(w.operator);
+        return [`${bop_col2(w.column)} ${bop} ${bop_val2(w.value)}`];
+      case "binary_arr_op":
+        console.log("binary_op",w)
+        const bopA = bop_array(w.operator);
+        return [`(${bop_col2(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
+    }
+    return [];
+  }
+}
 
-      default:
-        return unreachable(field["type"]);
+function relationship(rs: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
+  // (select json_group_array(json_object('Title', Album.Title)) from Album where Album.ArtistId = Artist.ArtistId) as J
+
+  console.log("relationship", f, r);
+
+  switch(r.relationship_type) {
+    // TODO: Query where clause etc.
+    case RelationshipType.Object:
+      console.log("Object relationships not supported yet", r, f, t);
+      return "oops";
+      // return `(select json_object(${object_relationship()}))`;
+
+    case RelationshipType.Array:
+      const wJoin   = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
+      const wFilter = array_relationship_where(f.query.where);
+      // TODO: Ensure that the table prefixes are correct - currently assuming it's from "parent" to "child"
+      return `
+        (select json_group_array(json_object(${array_relationship_object(rs, f.query.fields, r.target_table)}))
+          from ${r.target_table}
+          where ${[...wJoin, ...wFilter].join(" AND ")})
+      `;
+      // return `
+      //   (select json_group_array(json_object(${omap(f.query.fields, (k,v) => array_relationship_object(rs,k,v)).join(", ")}))
+      //     from ${r.target_table}
+      //     where ${[...wJoin, ...wFilter].join(" AND ")})
+      // `;
+  }
+}
+
+function fields(rs: Array<TableRelationships>, r: QueryRequest): string {
+  return omap(r.query.fields, (k,v) => {
+    switch(v.type) {
+      case "column":
+        return [`${v.column} as ${k}`];
+      case "relationship": // TODO: What if there's more than one table relationship? Currently just includes all of them!
+        return rs.flatMap((x) => {
+          if(x.source_table === r.table) {
+            const rel = x.relationships[v.relationship];
+            if(rel) {
+              return [`${relationship(rs, rel, v, r.table)} as ${k}`];
+            }
+          }
+          console.log("Couldn't find relationship for field", k, v, rs);
+          return [];
+        })
+    }
+  }).flatMap((e) => e).join(", ");
+}
+
+function bop_col2(c: ComparisonColumn): string {
+  if(c.path.length < 1) {
+    return c.name;
+  } else {
+    return c.path.join(".") + "." + c.name;
+  }
+}
+
+function bop_col(escapeSQL: EscapeSQL, c: ComparisonColumn): string {
+  if(c.path.length < 1) {
+    return c.name;
+  } else {
+    return c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name);
+  }
+}
+
+function bop_array(o: BinaryArrayComparisonOperator): string {
+  switch(o) {
+    case BinaryArrayComparisonOperator.In:
+      return "IN";
+  }
+}
+
+function bop_op(o: BinaryComparisonOperator): string {
+  switch(o) {
+    case BinaryComparisonOperator.Equal:              return "=";
+    case BinaryComparisonOperator.GreaterThan:        return ">";
+    case BinaryComparisonOperator.GreaterThanOrEqual: return ">=";
+    case BinaryComparisonOperator.LessThan:           return "<";
+    case BinaryComparisonOperator.LessThanOrEqual:    return "<=";
+  }
+}
+
+function bop_val(escapeSQL: EscapeSQL, v: ComparisonValue): string {
+  switch(v.type) {
+    case "column": return `${bop_col(escapeSQL, v.column)}`;
+    case "scalar": return `${escapeSQL(`${v.value}`)}`;
+  }
+}
+
+function bop_val2(v: ComparisonValue): string {
+  switch(v.type) {
+    case "column": return `${bop_col2(v.column)}`;
+    case "scalar":
+      if(typeof v.value == "number") {
+        return `${v.value}`;
+      } else {
+        return `'${v.value}'`;
+      }
+  }
+}
+
+function binary_op(escapeSQL: EscapeSQL, b: ApplyBinaryComparisonOperatorExpression): string {
+  return `${bop_col(escapeSQL, b.column)} ${bop_op(b.operator)} ${bop_val(escapeSQL, b.value)}`; // TODO: Validate
+}
+
+function subexpressions(escapeSQL: EscapeSQL, es: Array<Expression>): Array<string> {
+  return es.map((e) => where(escapeSQL, e)).filter(e => e !== ""); // NOTE: This seems fragile.
+}
+
+function junction(escapeSQL: EscapeSQL, es: Array<Expression>, b: string): string {
+  const ss = subexpressions(escapeSQL, es);
+  if(ss.length < 1) {
+    return "";
+  } else {
+    return ss.join(b);
+  }
+}
+
+function unary_op(escapeSQL: EscapeSQL, u: ApplyUnaryComparisonOperatorExpression): string {
+  // Note: Nested switches could be an issue, but since there is only one unary op,
+  // it should be ok.
+  switch(u.type) {
+    case "unary_op":
+      switch(u.operator) {
+        case UnaryComparisonOperator.IsNull:
+          return `${bop_col(escapeSQL, u.column)} IS NULL`;
+      }
+  }
+}
+
+function where(escapeSQL: EscapeSQL, w:Expression): string {
+  switch(w.type) {
+    case "not":           return `NOT (${where(escapeSQL, w.expression)})`;
+    case "and":           return junction(escapeSQL, w.expressions, " AND ");
+    case "or":            return junction(escapeSQL, w.expressions, " OR ");
+    case "unary_op":      return unary_op(escapeSQL, w);
+    case "binary_op":     return binary_op(escapeSQL, w);
+    case "binary_arr_op": // TODO
+      return "TODO";
+  }
+}
+
+function whereN(escapeSQL: EscapeSQL, w: Expression | null | undefined): string {
+  if(w == null) {
+    return "";
+  } else {
+    const r = where(escapeSQL, w);
+    if(r === "") {
+      return "";
+    } else {
+      return `where ${r}`;
     }
   }
-  return projectedRow;
-};
+}
 
-export const queryData = (staticData: StaticData, queryRequest: QueryRequest) => {
-  const performQuery = (tableName: TableName, query: Query): QueryResponse => {
-    const rows = staticData[tableName];
-    if (rows === undefined) {
-      throw `${tableName} is not a valid table`;
-    }
-    const findRelationship = makeFindRelationship(queryRequest.table_relationships, tableName);
-    const getComparisonColumnValues = makeGetComparisonColumnValues(findRelationship, performQuery);
-
-    const filteredRows = rows.filter(makeFilterPredicate(query.where ?? null, getComparisonColumnValues));
-    const sortedRows = sortRows(filteredRows, query.order_by ?? []);
-    const slicedRows = paginateRows(sortedRows, query.offset ?? null, query.limit ?? null);
-    return slicedRows.map(projectRow(query.fields, findRelationship, performQuery));
+function limit(r: QueryRequest): string {
+  if(r.query.limit == null) {
+    return "";
+  } else {
+    return `limit ${r.query.limit}`;
   }
+}
 
-  return performQuery(queryRequest.table, queryRequest.query);
-};
+function offset(r: QueryRequest): string {
+  if(r.query.offset == null) {
+    return "";
+  } else {
+    return `offset ${r.query.offset}`;
+  }
+}
+
+type EscapeSQL = (s: string) => string
+
+function query(t: Array<TableRelationships>, escapeSQL: EscapeSQL, r: QueryRequest): string {
+  return `select ${fields(t, r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
+}
+
+function output(rs: any): Array<ProjectedRow> {
+  return rs;
+}
+
+/** Performs a query and returns results
+ * 
+ * Limitations:
+ * 
+ * - Binary Array Operations not currently supported.
+ * - Relationship fields not currently supported.
+ * 
+ * The current algorithm is to first create a query, then execute it, returning results.
+ * 
+ * Method for adding relationship fields:
+ * 
+ * - Some kind of JSON aggregation similar to Postgres' approach. This doesn't seem to be available in SQLite.
+ *     - 4.13. The json_group_array() and json_group_object() aggregate SQL functions
+ *     - https://www.sqlite.org/json1.html#jgrouparray
+ * 
+ * Example of a test query:
+ * 
+ * ```
+ * query MyQuery {
+ *   Artist(limit: 5, order_by: {ArtistId: asc}, where: {Name: {_neq: "Accept"}, _and: {Name: {_is_null: false}}}) {
+ *     ArtistId
+ *     Name
+ *     Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "poo"}}) {
+ *       AlbumId
+ *       Title
+ *       ArtistId
+ *       Tracks {
+ *         Name
+ *         TrackId
+ *       }
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export async function queryData(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
+  console.log(queryRequest);
+  const db     = connect(config);             // TODO: Should this be cached?
+  const esc    = (s: string) => db.escape(s); // TODO: Thread escaper to other functions
+  const q      = query(queryRequest.table_relationships, esc, queryRequest);    // TODO: Could the depth of recursion be a problem?
+  const [r, m] = await db.query(q);
+  const o      = output(r);
+  return o;
+}
+
