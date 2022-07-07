@@ -43,8 +43,12 @@ The dataset used for testing the reference agent is sourced from https://raw.git
 # TODO
 
 * [ ] Ensure everything is escaped correctly
-* [ ] Use parameterized queries if possible
+* [ ] Or... Use parameterized queries if possible
 * [ ] Run test-suite from SDK
-* [ ] Remove old queries module
+* [x] Remove old queries module
 * [x] Relationships / Joins
 * [ ] Rename `resultTT` and other badly named types in the `schema.ts` module
+* [ ] Add ENV Variable for restriction on what databases can be used
+* [ ] Update to the latest types
+* [ ] Port back to hge codebase as an official reference agent
+* [x] Make escapeSQL global to the query module

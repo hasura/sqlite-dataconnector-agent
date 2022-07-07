@@ -19,8 +19,10 @@ import {
     Fields, 
   } from "./types/query";
 
-function relationship_object(escapeSQL: EscapeSQL, rs: Array<TableRelationships>, fs: Fields, t: string): string {
-  return omap(fs, (k,v) => {
+let escapeSQL: (s: string) => string // This is set globally when running queryData;
+
+function relationship_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
+  return tag('relationship_object',omap(fs, (k,v) => {
     switch(v.type) {
       case "column":
         return [`'${k}', ${v.column}`];
@@ -29,14 +31,14 @@ function relationship_object(escapeSQL: EscapeSQL, rs: Array<TableRelationships>
           if(x.source_table === t) {
             const rel = x.relationships[v.relationship];
             if(rel) {
-              return [`'${k}', ${relationship(escapeSQL, rs, rel, v, t)}`];
+              return [`'${k}', ${relationship(rs, rel, v, t)}`];
             }
           }
           console.log("Couldn't find relationship for field", k, v, rs);
           return [];
         })
     }
-  }).flatMap((e) => e).join(", ");
+  }).flatMap((e) => e).join(", "));
 }
 
 function relationship_where(w: Expression | null): Array<string> {
@@ -65,49 +67,42 @@ function relationship_where(w: Expression | null): Array<string> {
       case "unary_op":
         switch(w.operator) {
           case UnaryComparisonOperator.IsNull:
-            return [`(${bop_col2(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
+            return [`(${bop_col(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
         }
       case "binary_op":
         const bop = bop_op(w.operator);
-        return [`${bop_col2(w.column)} ${bop} ${bop_val2(w.value)}`];
+        return [`${bop_col(w.column)} ${bop} ${bop_val(w.value)}`];
       case "binary_arr_op":
         console.log("binary_op",w)
         const bopA = bop_array(w.operator);
-        return [`(${bop_col2(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
+        return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
     }
     return [];
   }
 }
 
-// TODO: Use wWhere?: instead of | null | undefined
 function array_relationship(
-    escapeSQL: EscapeSQL,
     ts: Array<TableRelationships>,
-    wTable: string,
+    table: string,
     wJoin: Array<string>,
-    wFields: Fields,
+    fields: Fields,
     wWhere: Expression | null,
     wLimit: number | null,
     wOffset: number | null,
   ): string {
-      const wFilter = relationship_where(wWhere);
-      // TODO: Ensure that the table prefixes are correct - currently assuming it's from "parent" to "child"
-      return `(
+      // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
+      return tag('array_relationship',`(
         SELECT json_group_array(j)
         FROM (
-          SELECT json_object(${relationship_object(escapeSQL, ts, wFields, wTable)}) as j
-          FROM ${wTable}
-          ${whereN(escapeSQL, wWhere, wJoin)}
+          SELECT json_object(${relationship_object(ts, fields, table)}) as j
+          FROM ${table}
+          ${whereN(wWhere, wJoin)}
           ${limit(wLimit)}
           ${offset(wOffset)}
-        ))`;
+        ))`);
 }
 
-function relationship(escapeSQL: EscapeSQL, ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
-  // (select json_group_array(json_object('Title', Album.Title)) from Album where Album.ArtistId = Artist.ArtistId) as J
-
-  console.log("relationship", f, r);
-
+function relationship(ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
   switch(r.relationship_type) {
     // TODO: Query where clause etc.
     case RelationshipType.Object:
@@ -118,8 +113,7 @@ function relationship(escapeSQL: EscapeSQL, ts: Array<TableRelationships>, r: Re
     case RelationshipType.Array:
       const wJoin   = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
       // const wFilter = relationship_where(f.query.where);
-      return array_relationship(
-        escapeSQL,
+      return tag('relationship',array_relationship(
         ts,
         r.target_table,
         wJoin,
@@ -127,129 +121,89 @@ function relationship(escapeSQL: EscapeSQL, ts: Array<TableRelationships>, r: Re
         coerceUndefinedToNull(f.query.where),
         coerceUndefinedToNull(f.query.limit),
         coerceUndefinedToNull(f.query.offset),
-        );
-      // return `
-      //   (select json_group_array(json_object(${relationship_object(ts, f.query.fields, r.target_table)}))
-      //     from ${r.target_table}
-      //     where ${[...wJoin, ...wFilter].join(" AND ")})
-      // `;
+      ));
   }
 }
 
-function fields(escapeSQL: EscapeSQL, rs: Array<TableRelationships>, r: QueryRequest): string {
-  return omap(r.query.fields, (k,v) => {
-    switch(v.type) {
-      case "column":
-        return [`${v.column} as ${k}`];
-      case "relationship": // TODO: What if there's more than one table relationship? Currently just includes all of them!
-        return rs.flatMap((x) => {
-          if(x.source_table === r.table) {
-            const rel = x.relationships[v.relationship];
-            if(rel) {
-              return [`${relationship(escapeSQL, rs, rel, v, r.table)} as ${k}`];
-            }
-          }
-          console.log("Couldn't find relationship for field", k, v, rs);
-          return [];
-        })
-    }
-  }).flatMap((e) => e).join(", ");
-}
-
-function bop_col2(c: ComparisonColumn): string {
+function bop_col(c: ComparisonColumn): string {
   if(c.path.length < 1) {
-    return c.name;
+    return tag('bop_col',c.name);
   } else {
-    return c.path.join(".") + "." + c.name;
-  }
-}
-
-function bop_col(escapeSQL: EscapeSQL, c: ComparisonColumn): string {
-  if(c.path.length < 1) {
-    return c.name;
-  } else {
-    return c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name);
+    return tag('bop_col',c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name));
   }
 }
 
 function bop_array(o: BinaryArrayComparisonOperator): string {
   switch(o) {
     case BinaryArrayComparisonOperator.In:
-      return "IN";
+      return tag('bop_array','IN');
   }
 }
 
 function bop_op(o: BinaryComparisonOperator): string {
+  let result;
   switch(o) {
-    case BinaryComparisonOperator.Equal:              return "=";
-    case BinaryComparisonOperator.GreaterThan:        return ">";
-    case BinaryComparisonOperator.GreaterThanOrEqual: return ">=";
-    case BinaryComparisonOperator.LessThan:           return "<";
-    case BinaryComparisonOperator.LessThanOrEqual:    return "<=";
+    case BinaryComparisonOperator.Equal:              result = "="; break;
+    case BinaryComparisonOperator.GreaterThan:        result = ">"; break;
+    case BinaryComparisonOperator.GreaterThanOrEqual: result = ">="; break;
+    case BinaryComparisonOperator.LessThan:           result = "<"; break;
+    case BinaryComparisonOperator.LessThanOrEqual:    result = "<="; break;
   }
+  return tag('bop_op',result);
 }
 
-function bop_val(escapeSQL: EscapeSQL, v: ComparisonValue): string {
+function bop_val(v: ComparisonValue): string {
   switch(v.type) {
-    case "column": return `${bop_col(escapeSQL, v.column)}`;
-    case "scalar": return `${escapeSQL(`${v.value}`)}`;
+    case "column": return tag('bop_val',`${bop_col(v.column)}`);
+    case "scalar": return tag('bop_val',`${escapeSQL(`${v.value}`)}`);
   }
 }
 
-function bop_val2(v: ComparisonValue): string {
-  switch(v.type) {
-    case "column": return `${bop_col2(v.column)}`;
-    case "scalar":
-      if(typeof v.value == "number") {
-        return `${v.value}`;
-      } else {
-        return `'${v.value}'`;
-      }
-  }
+function binary_op(b: ApplyBinaryComparisonOperatorExpression): string {
+  const result = `${bop_col(b.column)} ${bop_op(b.operator)} ${bop_val(b.value)}`; // TODO: Validate
+  return tag('binary_op', result);
 }
 
-function binary_op(escapeSQL: EscapeSQL, b: ApplyBinaryComparisonOperatorExpression): string {
-  return `${bop_col(escapeSQL, b.column)} ${bop_op(b.operator)} ${bop_val(escapeSQL, b.value)}`; // TODO: Validate
+function subexpressions(es: Array<Expression>): Array<string> {
+  return es.map((e) => where(e)).filter(e => e !== ""); // NOTE: This seems fragile.
 }
 
-function subexpressions(escapeSQL: EscapeSQL, es: Array<Expression>): Array<string> {
-  return es.map((e) => where(escapeSQL, e)).filter(e => e !== ""); // NOTE: This seems fragile.
-}
-
-function junction(escapeSQL: EscapeSQL, es: Array<Expression>, b: string): string {
-  const ss = subexpressions(escapeSQL, es);
+function junction(es: Array<Expression>, b: string): string {
+  const ss = subexpressions(es);
   if(ss.length < 1) {
     return "";
   } else {
-    return ss.join(b);
+    return tag(`junction(${b})`,ss.join(b));
   }
 }
 
-function unary_op(escapeSQL: EscapeSQL, u: ApplyUnaryComparisonOperatorExpression): string {
+function unary_op(u: ApplyUnaryComparisonOperatorExpression): string {
   // Note: Nested switches could be an issue, but since there is only one unary op,
   // it should be ok.
   switch(u.type) {
     case "unary_op":
       switch(u.operator) {
         case UnaryComparisonOperator.IsNull:
-          return `${bop_col(escapeSQL, u.column)} IS NULL`;
+          return tag('unary_op',`${bop_col(u.column)} IS NULL`);
       }
   }
 }
 
-function where(escapeSQL: EscapeSQL, w:Expression): string {
+function where(w:Expression): string {
+  let result;
   switch(w.type) {
-    case "not":           return `NOT (${where(escapeSQL, w.expression)})`;
-    case "and":           return junction(escapeSQL, w.expressions, " AND ");
-    case "or":            return junction(escapeSQL, w.expressions, " OR ");
-    case "unary_op":      return unary_op(escapeSQL, w);
-    case "binary_op":     return binary_op(escapeSQL, w);
+    case "not":           result = `NOT (${where(w.expression)})`; break;
+    case "and":           result = junction(w.expressions, " AND "); break;
+    case "or":            result = junction(w.expressions, " OR "); break;
+    case "unary_op":      result = unary_op(w); break;
+    case "binary_op":     result = binary_op(w); break;
     case "binary_arr_op": // TODO
-      return "TODO";
+      result = "TODO"; break;
   }
+  return tag('where',result);
 }
 
-function whereN(escapeSQL: EscapeSQL, w: Expression | null, j: Array<string>,): string {
+function whereN(w: Expression | null, j: Array<string>,): string {
   if(w == null) {
     return "";
   } else {
@@ -257,7 +211,7 @@ function whereN(escapeSQL: EscapeSQL, w: Expression | null, j: Array<string>,): 
     if(r.length < 1) {
       return "";
     } else {
-      return `WHERE ${[...r, ...j].join(" AND ")}`;
+      return tag('whereN',`WHERE ${[...r, ...j].join(" AND ")}`);
     }
   }
 }
@@ -266,7 +220,7 @@ function limit(l: number | null): string {
   if(l === null) {
     return "";
   } else {
-    return `LIMIT ${l}`;
+    return tag('limit',`LIMIT ${l}`);
   }
 }
 
@@ -274,35 +228,13 @@ function offset(o: number | null): string {
   if(o == null) {
     return "";
   } else {
-    return `OFFSET ${o}`;
+    return tag('offset', `OFFSET ${o}`);
   }
 }
 
-type EscapeSQL = (s: string) => string
-
-function object_relationship(escapeSQL: EscapeSQL, ts: Array<TableRelationships>, q: QueryRequest ): string {
-  const wFilter = relationship_where(coerceUndefinedToNull(q.query.where));
-  return `
-    (select json_object(${relationship_object(escapeSQL, q.table_relationships, q.query.fields, q.table)})
-      FROM ${q.table}
-      WHERE ${wFilter.join(" AND ")})
-  `;
-}
-
-// function query(t: Array<TableRelationships>, escapeSQL: EscapeSQL, q: QueryRequest): string {
-//   // return `select ${fields(t, r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
-//   return `
-//     SELECT ${object_relationship(escapeSQL, t, q)}
-//     FROM ${escapeSQL(q.table)}
-//     ${whereN(escapeSQL, q.query.where)}
-//     ${limit(q)}
-//     ${offset(q)}`;
-// }
-
-function query(t: Array<TableRelationships>, escapeSQL: EscapeSQL, r: QueryRequest): string {
-  // return `select ${fields(t, r)} from ${escapeSQL(r.table)} ${whereN(escapeSQL, r.query.where)} ${limit(r)} ${offset(r)}`;
+// TODO: Could the depth of recursion be a problem?
+function query(t: Array<TableRelationships>, r: QueryRequest): string {
   const q = array_relationship(
-    escapeSQL,
     r.table_relationships,
     r.table,
     [],
@@ -311,11 +243,19 @@ function query(t: Array<TableRelationships>, escapeSQL: EscapeSQL, r: QueryReque
     coerceUndefinedToNull(r.query.limit),
     coerceUndefinedToNull(r.query.offset),
     );
-  return `SELECT ${q} as data`;
+  return tag('query', `SELECT ${q} as data`);
 }
 
 function output(r: any): Array<ProjectedRow> {
   return JSON.parse(r[0].data); // TODO: What to do if there are no results? (Should be impossible.)
+}
+
+/** Function to add SQL comments to the generated SQL to tag which procedures generated what text.
+ * 
+ * comment('a','b') => '/*\<a>\*\/ b /*\</a>*\/'
+ */
+function tag(t: string, s: string): string {
+  return `/*<${t}>*/ ${s} /*</${t}>*/`;
 }
 
 /** Performs a query and returns results
@@ -323,13 +263,12 @@ function output(r: any): Array<ProjectedRow> {
  * Limitations:
  * 
  * - Binary Array Operations not currently supported.
- * - Relationship fields not currently supported.
  * 
  * The current algorithm is to first create a query, then execute it, returning results.
  * 
  * Method for adding relationship fields:
  * 
- * - Some kind of JSON aggregation similar to Postgres' approach. This doesn't seem to be available in SQLite.
+ * - JSON aggregation similar to Postgres' approach.
  *     - 4.13. The json_group_array() and json_group_object() aggregate SQL functions
  *     - https://www.sqlite.org/json1.html#jgrouparray
  * 
@@ -353,7 +292,7 @@ function output(r: any): Array<ProjectedRow> {
  *   }
  * ```
  * 
- * Example of Raw Queries:
+ * Example of Raw SQLite queries and results for Reference:
  * 
  * sqlite> select json_group_array(j) from (select json_object('who', name) as j from artist limit 5);
  *   [{"who":"AC/DC"},{"who":"Accept"},{"who":"Aerosmith"},{"who":"Alanis Morissette"},{"who":"Alice In Chains"}]
@@ -366,11 +305,9 @@ function output(r: any): Array<ProjectedRow> {
  */
 export async function queryData(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
   console.log(queryRequest);
-  const db     = connect(config);             // TODO: Should this be cached?
-  const esc    = (s: string) => db.escape(s); // TODO: Thread escaper to other functions
-  // TODO: Could the depth of recursion be a problem?
-  const q      = query(queryRequest.table_relationships, esc, queryRequest);    // TODO: Could the depth of recursion be a problem?
-  // const q      = array_relationship(queryRequest.table_relationships, queryRequest.table, [], queryRequest.query.fields, queryRequest.query.where);
+  const db     = connect(config); // TODO: Should this be cached?
+  escapeSQL    = (s: string) => db.escape(s); // Set globally for this module
+  const q      = query(queryRequest.table_relationships, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
   return o;
