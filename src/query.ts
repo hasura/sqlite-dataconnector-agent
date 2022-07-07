@@ -25,16 +25,19 @@ function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): stri
       case "column":
         return [`'${k}', ${v.column}`];
       case "relationship":
-        return rs.flatMap((x) => {
+        const result = rs.flatMap((x) => {
           if(x.source_table === t) {
             const rel = x.relationships[v.relationship];
             if(rel) {
               return [`'${k}', ${relationship(rs, rel, v, t)}`];
             }
           }
-          console.log("Couldn't find relationship for field", k, v, rs);
           return [];
-        })
+        });
+        if(result.length < 1) {
+          console.log("Couldn't find relationship for field", k, v, rs);
+        }
+        return result;
     }
   }).flatMap((e) => e).join(", "));
 }
@@ -253,24 +256,35 @@ function tag(t: string, s: string): string {
  *     - 4.13. The json_group_array() and json_group_object() aggregate SQL functions
  *     - https://www.sqlite.org/json1.html#jgrouparray
  * 
+
+
  * Example of a test query:
  * 
  * ```
  * query MyQuery {
- *   Artist(limit: 5, order_by: {ArtistId: asc, Albums_aggregate: {}}, where: {Name: {_neq: "Accept"}, _and: {Name: {_is_null: false}}}) {
+ *   Artist(limit: 5, order_by: {ArtistId: asc}, where: {Name: {_neq: "Accept"}, _and: {Name: {_is_null: false}}}, offset: 3) {
+ *     ArtistId
+ *     Name
+ *     Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "foo"}}, limit: 2) {
+ *       AlbumId
+ *       Title
  *       ArtistId
- *       Name
- *       Albums(where: {Title: {_is_null: false, _gt: "A", _nin: "foo"}}, limit: 2) {
- *         AlbumId
- *         Title
+ *       Tracks(limit: 1) {
+ *         Name
+ *         TrackId
+ *       }
+ *       Artist {
  *         ArtistId
- *         Tracks(limit: 1) {
- *           Name
- *           TrackId
- *         }
  *       }
  *     }
  *   }
+ *   Track(limit: 3) {
+ *     Name
+ *     Album {
+ *       Title
+ *     }
+ *   }
+ * }
  * ```
  * 
  * Example of Raw SQLite queries and results for Reference:
