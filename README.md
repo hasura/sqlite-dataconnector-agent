@@ -52,3 +52,4 @@ The dataset used for testing the reference agent is sourced from https://raw.git
 * [ ] Update to the latest types
 * [ ] Port back to hge codebase as an official reference agent
 * [x] Make escapeSQL global to the query module
+* [ ] Look for logs of `Couldn't find relationship for`

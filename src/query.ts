@@ -9,8 +9,6 @@ import {
     ComparisonValue,
     QueryRequest,
     ComparisonColumn,
-    ApplyBinaryComparisonOperatorExpression,
-    ApplyUnaryComparisonOperatorExpression,
     TableRelationships,
     Relationship,
     RelationshipField,
@@ -21,8 +19,8 @@ import {
 
 let escapeSQL: (s: string) => string // This is set globally when running queryData;
 
-function relationship_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
-  return tag('relationship_object',omap(fs, (k,v) => {
+function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
+  return tag('json_object', omap(fs, (k,v) => {
     switch(v.type) {
       case "column":
         return [`'${k}', ${v.column}`];
@@ -94,26 +92,53 @@ function array_relationship(
       return tag('array_relationship',`(
         SELECT json_group_array(j)
         FROM (
-          SELECT json_object(${relationship_object(ts, fields, table)}) as j
+          SELECT json_object(${json_object(ts, fields, table)}) as j
           FROM ${table}
-          ${whereN(wWhere, wJoin)}
+          ${where(wWhere, wJoin)}
           ${limit(wLimit)}
           ${offset(wOffset)}
         ))`);
 }
 
+function object_relationship(
+    ts: Array<TableRelationships>,
+    table: string,
+    wJoin: Array<string>,
+    fields: Fields,
+    wWhere: Expression | null,
+    wLimit: number | null,
+    wOffset: number | null,
+  ): string {
+      // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
+      return tag('object_relationship',`(
+        SELECT json_object(${json_object(ts, fields, table)}) as j
+        FROM ${table}
+        ${where(wWhere, wJoin)}
+        ${limit(wLimit)}
+        ${offset(wOffset)}
+      )`);
+}
+
 function relationship(ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
+  const wJoin = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
+
   switch(r.relationship_type) {
     // TODO: Query where clause etc.
     case RelationshipType.Object:
-      console.log("Object relationships not supported yet", r, f, t);
-      return "oops";
+      return tag('relationship', object_relationship(
+        ts,
+        r.target_table,
+        wJoin,
+        f.query.fields,
+        coerceUndefinedToNull(f.query.where),
+        coerceUndefinedToNull(f.query.limit),
+        coerceUndefinedToNull(f.query.offset),
+      ));
       // return `(select json_object(${object_relationship()}))`;
 
     case RelationshipType.Array:
-      const wJoin   = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
       // const wFilter = relationship_where(f.query.where);
-      return tag('relationship',array_relationship(
+      return tag('relationship', array_relationship(
         ts,
         r.target_table,
         wJoin,
@@ -159,51 +184,7 @@ function bop_val(v: ComparisonValue): string {
   }
 }
 
-function binary_op(b: ApplyBinaryComparisonOperatorExpression): string {
-  const result = `${bop_col(b.column)} ${bop_op(b.operator)} ${bop_val(b.value)}`; // TODO: Validate
-  return tag('binary_op', result);
-}
-
-function subexpressions(es: Array<Expression>): Array<string> {
-  return es.map((e) => where(e)).filter(e => e !== ""); // NOTE: This seems fragile.
-}
-
-function junction(es: Array<Expression>, b: string): string {
-  const ss = subexpressions(es);
-  if(ss.length < 1) {
-    return "";
-  } else {
-    return tag(`junction(${b})`,ss.join(b));
-  }
-}
-
-function unary_op(u: ApplyUnaryComparisonOperatorExpression): string {
-  // Note: Nested switches could be an issue, but since there is only one unary op,
-  // it should be ok.
-  switch(u.type) {
-    case "unary_op":
-      switch(u.operator) {
-        case UnaryComparisonOperator.IsNull:
-          return tag('unary_op',`${bop_col(u.column)} IS NULL`);
-      }
-  }
-}
-
-function where(w:Expression): string {
-  let result;
-  switch(w.type) {
-    case "not":           result = `NOT (${where(w.expression)})`; break;
-    case "and":           result = junction(w.expressions, " AND "); break;
-    case "or":            result = junction(w.expressions, " OR "); break;
-    case "unary_op":      result = unary_op(w); break;
-    case "binary_op":     result = binary_op(w); break;
-    case "binary_arr_op": // TODO
-      result = "TODO"; break;
-  }
-  return tag('where',result);
-}
-
-function whereN(w: Expression | null, j: Array<string>,): string {
+function where(w: Expression | null, j: Array<string>,): string {
   if(w == null) {
     return "";
   } else {
@@ -211,7 +192,7 @@ function whereN(w: Expression | null, j: Array<string>,): string {
     if(r.length < 1) {
       return "";
     } else {
-      return tag('whereN',`WHERE ${[...r, ...j].join(" AND ")}`);
+      return tag('where',`WHERE ${[...r, ...j].join(" AND ")}`);
     }
   }
 }
