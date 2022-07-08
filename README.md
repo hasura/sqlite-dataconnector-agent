@@ -19,7 +19,10 @@ This directory contains an SQLite implementation of a data connector agent.
 ## Options / Environment Variables
 
 * ENV: `PERMISSIVE_CORS={1|true|yes}` - Allows all requests - Useful for testing with SwaggerUI. Turn off on production.
+* ENV: `DB_CREATE={1|true|yes}` - Allows new databases to be created, not permitted by default.
+* ENV: `DB_READONLY={1|true|yes}` - Makes databases readonly, they are read-write by default.
 * ENV: `DB_ALLOW_LIST=DB1[,DB2]*` - Restrict what databases can be connected to.
+* ENV: `DB_PRIVATECACHE` - Keep caches between connections private. Shared by default.
 
 ## Agent usage
 
@@ -79,8 +82,11 @@ From the HGE repo.
 * [x] Make CORS permissions configurable
 * [x] Optional DB Allowlist
 * [ ] Fix SDK Test suite to be more flexible about descriptions
-* [ ] READONLY option
-* [ ] Don't create DB option
+* [x] READONLY option
+* [x] CREATE option
+* [x] Don't create DB option
+* [ ] Verbosity settings
+* [x] Cache settings
 
 # Known Bugs
 

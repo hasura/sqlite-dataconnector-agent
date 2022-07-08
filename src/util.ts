@@ -21,3 +21,7 @@ export const crossProduct = <T, U>(arr1: T[], arr2: U[]): [T,U][] => {
 export function omap<V,O>(m: { [x: string]: V; },f: (k: string, v: V) => O) {
   return Object.keys(m).map(k => f(k, m[k]))
 }
+
+export function stringToBool(x: string | null | undefined): boolean {
+  return (/1|true|t|yes|y/i).test(x || '');
+}
