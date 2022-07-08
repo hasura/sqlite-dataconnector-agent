@@ -63,7 +63,7 @@ From the HGE repo.
 * [x] Object Relationships
 * [ ] Ensure everything is escaped correctly
 * [ ] Or... Use parameterized queries if possible
-* [ ] Run test-suite from SDK
+* [x] Run test-suite from SDK
 * [x] Remove old queries module
 * [x] Relationships / Joins
 * [ ] Rename `resultTT` and other badly named types in the `schema.ts` module
@@ -73,6 +73,7 @@ From the HGE repo.
 * [x] Make escapeSQL global to the query module
 * [x] Make CORS permissions configurable
 * [x] Optional DB Allowlist
+* [ ] Fix SDK Test suite to be more flexible about descriptions
 
 # Known Bugs
 
