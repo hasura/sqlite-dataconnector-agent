@@ -35,6 +35,8 @@ The schema is exposed via introspection, but you can limit which tables are refe
 > docker run -it --rm -p 8100:8100 dc-sqlite-agent:latest
 ```
 
+You will want to mount a volume with your database(s) so that they can be referenced in configuration.
+
 # Dataset
 
 The dataset used for testing the reference agent is sourced from https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
@@ -66,6 +68,7 @@ From the HGE repo.
 * [x] Make escapeSQL global to the query module
 * [ ] Look for logs of `Couldn't find relationship for`
 * [ ] Make CORS permissions configurable
+* [ ] Optional DB Allowlist
 
 # Known Bugs
 
