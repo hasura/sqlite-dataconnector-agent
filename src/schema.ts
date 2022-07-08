@@ -1,7 +1,7 @@
 import { SchemaResponse, ScalarType, ColumnInfo, TableInfo } from "./types"
 import { Config } from "./config";
 import { connect } from './db';
-import { Sequelize } from 'sequelize';
+
 const SQLiteDDLParser = require('sqlite-ddl-parser');
 
 type columnT = {

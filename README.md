@@ -90,6 +90,23 @@ From the HGE repo.
 
 # Known Bugs
 
+## Object Relationships Incorrect
+
+Example:
+
+```graphql
+query MyQuery {
+  Track {
+    Name
+    Album {
+      Title
+    }
+  }
+}
+```
+
+## ORDER BY Breaks Output
+
 Ordering clauses can cause results to be generated incorrectly - rows of strings, as opposed to rows of objects.
 
 Example:

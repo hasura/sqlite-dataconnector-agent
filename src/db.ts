@@ -1,10 +1,8 @@
 import { Config } from "./config";
 import { Sequelize } from 'sequelize';
 import { env } from "process";
-import SQLite from 'sqlite3';
 import { stringToBool } from "./util";
-
-const SQLiteDDLParser = require('sqlite-ddl-parser');
+import SQLite from 'sqlite3';
 
 export function connect(config: Config): Sequelize {
   if(env.DB_ALLOW_LIST != null) {
