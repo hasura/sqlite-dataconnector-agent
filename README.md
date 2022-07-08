@@ -67,13 +67,13 @@ From the HGE repo.
 * [x] Remove old queries module
 * [x] Relationships / Joins
 * [ ] Rename `resultTT` and other badly named types in the `schema.ts` module
-* [ ] Add ENV Variable for restriction on what databases can be used
+* [x] Add ENV Variable for restriction on what databases can be used
 * [x] Update to the latest types
 * [ ] Port back to hge codebase as an official reference agent
 * [x] Make escapeSQL global to the query module
 * [ ] Look for logs of `Couldn't find relationship for`
 * [x] Make CORS permissions configurable
-* [ ] Optional DB Allowlist
+* [x] Optional DB Allowlist
 
 # Known Bugs
 
