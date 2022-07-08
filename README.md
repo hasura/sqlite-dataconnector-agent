@@ -90,6 +90,18 @@ From the HGE repo.
 
 # Known Bugs
 
+## Where criteria for related tables
+
+Handling `WHERE: {...}` criteria for related tables
+
+Example:
+
+```graphql
+query {
+  Artist(where: { Albums: { Name { _eq: "Foo " } } })
+}
+```
+
 ## Object Relationships Incorrect
 
 Example:
