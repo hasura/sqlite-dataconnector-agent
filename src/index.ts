@@ -9,6 +9,7 @@ import {
   SchemaResponse,
   QueryRequest,
   } from './types';
+import { connect } from './db';
 
 const port = Number(process.env.PORT) || 8100;
 const server = Fastify({ logger: { prettyPrint: true } });
@@ -40,8 +41,23 @@ server.post<{ Body: QueryRequest, Reply: QueryResponse }>("/query", async (reque
 });
 
 server.get("/health", async (request, response) => {
-  server.log.info({ headers: request.headers, query: request.body, }, "health.request");
-  response.statusCode = 204;
+  const config = getConfig(request);
+
+  if(config.db == null) {
+    server.log.info({ headers: request.headers, query: request.body, }, "health.request");
+    response.statusCode = 204;
+  } else {
+    server.log.info({ headers: request.headers, query: request.body, }, "health.db.request");
+    const db = connect(config);
+    const [r, m] = await db.query('select 1 where 1 = 1');
+    if(r && JSON.stringify(r) == '[{"1":1}]') {
+      response.statusCode = 204;
+      return { "status": "ok" };
+    } else {
+      response.statusCode = 500;
+      return { "error": "problem executing query", "query_result": r };
+    }
+  }
 });
 
 process.on('SIGINT', () => {
