@@ -65,6 +65,7 @@ From the HGE repo.
 * [ ] Port back to hge codebase as an official reference agent
 * [x] Make escapeSQL global to the query module
 * [ ] Look for logs of `Couldn't find relationship for`
+* [ ] Make CORS permissions configurable
 
 # Known Bugs
 
