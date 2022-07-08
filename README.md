@@ -18,7 +18,8 @@ This directory contains an SQLite implementation of a data connector agent.
 
 ## Options / Environment Variables
 
-* ENV: `PERMISSIVE_CORS={1|true|yes}` -> Allows all requests - Useful for testing with SwaggerUI. Turn off on production.
+* ENV: `PERMISSIVE_CORS={1|true|yes}` - Allows all requests - Useful for testing with SwaggerUI. Turn off on production.
+* ENV: `DB_ALLOW_LIST=DB1[,DB2]*` - Restrict what databases can be connected to.
 
 ## Agent usage
 
@@ -67,7 +68,7 @@ From the HGE repo.
 * [x] Relationships / Joins
 * [ ] Rename `resultTT` and other badly named types in the `schema.ts` module
 * [ ] Add ENV Variable for restriction on what databases can be used
-* [ ] Update to the latest types
+* [x] Update to the latest types
 * [ ] Port back to hge codebase as an official reference agent
 * [x] Make escapeSQL global to the query module
 * [ ] Look for logs of `Couldn't find relationship for`
