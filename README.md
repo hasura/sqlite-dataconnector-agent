@@ -59,6 +59,11 @@ From the HGE repo.
 
 # TODO
 
+* [x] Health Check
+* [ ] DB Specific Health Checks
+* [x] Schema
+* [x] Capabilities
+* [x] Query
 * [x] Array Relationships
 * [x] Object Relationships
 * [ ] Ensure everything is escaped correctly
