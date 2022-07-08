@@ -16,6 +16,10 @@ This directory contains an SQLite implementation of a data connector agent.
 > npm start
 ```
 
+## Options / Environment Variables
+
+* ENV: `PERMISSIVE_CORS={1|true|yes}` -> Allows all requests - Useful for testing with SwaggerUI. Turn off on production.
+
 ## Agent usage
 
 The agent is configured as per the configuration schema.
