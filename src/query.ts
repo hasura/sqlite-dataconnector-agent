@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedToNull, omap }    from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap }    from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -14,7 +14,8 @@ import {
     RelationshipField,
     RelationshipType,
     BinaryArrayComparisonOperator,
-    Fields, 
+    Fields,
+    OrderBy, 
   } from "./types/query";
 
 let escapeSQL: (s: string) => string // This is set globally when running queryData;
@@ -90,6 +91,7 @@ function array_relationship(
     wWhere: Expression | null,
     wLimit: number | null,
     wOffset: number | null,
+    wOrder: Array<OrderBy>,
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       return tag('array_relationship',`(
@@ -98,6 +100,7 @@ function array_relationship(
           SELECT json_object(${json_object(ts, fields, table)}) as j
           FROM ${table}
           ${where(wWhere, wJoin)}
+          ${order(wOrder)}
           ${limit(wLimit)}
           ${offset(wOffset)}
         ))`);
@@ -108,17 +111,12 @@ function object_relationship(
     table: string,
     wJoin: Array<string>,
     fields: Fields,
-    wWhere: Expression | null,
-    wLimit: number | null,
-    wOffset: number | null,
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       return tag('object_relationship',`(
         SELECT json_object(${json_object(ts, fields, table)}) as j
         FROM ${table}
-        ${where(wWhere, wJoin)}
-        ${limit(wLimit)}
-        ${offset(wOffset)}
+        ${where(null, wJoin)}
       )`);
 }
 
@@ -133,9 +131,9 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
         r.target_table,
         wJoin,
         f.query.fields,
-        coerceUndefinedToNull(f.query.where),
-        coerceUndefinedToNull(f.query.limit),
-        coerceUndefinedToNull(f.query.offset),
+        // coerceUndefinedToNull(f.query.where), // TODO: Are these required for object relationships? Surely not!
+        // coerceUndefinedToNull(f.query.limit),
+        // coerceUndefinedToNull(f.query.offset),
       ));
       // return `(select json_object(${object_relationship()}))`;
 
@@ -149,6 +147,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
         coerceUndefinedToNull(f.query.where),
         coerceUndefinedToNull(f.query.limit),
         coerceUndefinedToNull(f.query.offset),
+        coerceUndefinedOrNullToEmptyArray(f.query.order_by),
       ));
   }
 }
@@ -185,6 +184,15 @@ function bop_val(v: ComparisonValue): string {
     case "column": return tag('bop_val',`${bop_col(v.column)}`);
     case "scalar": return tag('bop_val',`${escapeSQL(`${v.value}`)}`);
   }
+}
+
+function order(o: Array<OrderBy>): string {
+  console.log('order', o)
+  if(o.length < 1) {
+    return "";
+  }
+  const result = o.map(e => `${e.column} ${e.ordering}`).join(', ');
+  return tag('order',`ORDER BY ${result}`);
 }
 
 function where(w: Expression | null, j: Array<string>,): string {
@@ -226,6 +234,7 @@ function query(t: Array<TableRelationships>, r: QueryRequest): string {
     coerceUndefinedToNull(r.query.where),
     coerceUndefinedToNull(r.query.limit),
     coerceUndefinedToNull(r.query.offset),
+    coerceUndefinedOrNullToEmptyArray(r.query.order_by),
     );
   return tag('query', `SELECT ${q} as data`);
 }
@@ -305,6 +314,7 @@ export async function queryData(config: Config, queryRequest: QueryRequest): Pro
   const q      = query(queryRequest.table_relationships, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
+  console.log('output', o);
   return o;
 }
 
