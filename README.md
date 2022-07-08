@@ -60,7 +60,7 @@ From the HGE repo.
 # TODO
 
 * [x] Health Check
-* [ ] DB Specific Health Checks
+* [x] DB Specific Health Checks
 * [x] Schema
 * [x] Capabilities
 * [x] Query
@@ -79,6 +79,8 @@ From the HGE repo.
 * [x] Make CORS permissions configurable
 * [x] Optional DB Allowlist
 * [ ] Fix SDK Test suite to be more flexible about descriptions
+* [ ] READONLY option
+* [ ] Don't create DB option
 
 # Known Bugs
 
