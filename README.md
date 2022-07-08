@@ -42,6 +42,8 @@ The dataset used for testing the reference agent is sourced from https://raw.git
 
 # TODO
 
+* [x] Array Relationships
+* [x] Object Relationships
 * [ ] Ensure everything is escaped correctly
 * [ ] Or... Use parameterized queries if possible
 * [ ] Run test-suite from SDK
