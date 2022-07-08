@@ -4,19 +4,21 @@ import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap }    fro
 import {
     Expression,
     BinaryComparisonOperator,
-    ProjectedRow,
-    UnaryComparisonOperator,
     ComparisonValue,
     QueryRequest,
     ComparisonColumn,
     TableRelationships,
     Relationship,
     RelationshipField,
-    RelationshipType,
     BinaryArrayComparisonOperator,
-    Fields,
-    OrderBy, 
-  } from "./types/query";
+    OrderBy,
+    QueryResponse,
+    Field, 
+  } from "./types";
+
+/** Helper type for convenience.
+ */
+type Fields = Record<string, Field>
 
 let escapeSQL: (s: string) => string // This is set globally when running queryData;
 
@@ -68,14 +70,13 @@ function relationship_where(w: Expression | null): Array<string> {
         break;
       case "unary_op":
         switch(w.operator) {
-          case UnaryComparisonOperator.IsNull:
+          case 'is_null':
             return [`(${bop_col(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
         }
       case "binary_op":
         const bop = bop_op(w.operator);
         return [`${bop_col(w.column)} ${bop} ${bop_val(w.value)}`];
       case "binary_arr_op":
-        console.log("binary_op",w)
         const bopA = bop_array(w.operator);
         return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
     }
@@ -124,21 +125,15 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
   const wJoin = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
 
   switch(r.relationship_type) {
-    // TODO: Query where clause etc.
-    case RelationshipType.Object:
+    case 'object':
       return tag('relationship', object_relationship(
         ts,
         r.target_table,
         wJoin,
         f.query.fields,
-        // coerceUndefinedToNull(f.query.where), // TODO: Are these required for object relationships? Surely not!
-        // coerceUndefinedToNull(f.query.limit),
-        // coerceUndefinedToNull(f.query.offset),
       ));
-      // return `(select json_object(${object_relationship()}))`;
 
-    case RelationshipType.Array:
-      // const wFilter = relationship_where(f.query.where);
+    case 'array':
       return tag('relationship', array_relationship(
         ts,
         r.target_table,
@@ -162,19 +157,19 @@ function bop_col(c: ComparisonColumn): string {
 
 function bop_array(o: BinaryArrayComparisonOperator): string {
   switch(o) {
-    case BinaryArrayComparisonOperator.In:
-      return tag('bop_array','IN');
+    case 'in': return tag('bop_array','IN');
   }
 }
 
 function bop_op(o: BinaryComparisonOperator): string {
   let result;
   switch(o) {
-    case BinaryComparisonOperator.Equal:              result = "="; break;
-    case BinaryComparisonOperator.GreaterThan:        result = ">"; break;
-    case BinaryComparisonOperator.GreaterThanOrEqual: result = ">="; break;
-    case BinaryComparisonOperator.LessThan:           result = "<"; break;
-    case BinaryComparisonOperator.LessThanOrEqual:    result = "<="; break;
+    // 'less_than' | 'less_than_or_equal' | 'greater_than' | 'greater_than_or_equal' | 'equal';
+    case 'equal':                 result = "="; break;
+    case 'greater_than':          result = ">"; break;
+    case 'greater_than_or_equal': result = ">="; break;
+    case 'less_than':             result = "<"; break;
+    case 'less_than_or_equal':    result = "<="; break;
   }
   return tag('bop_op',result);
 }
@@ -187,7 +182,6 @@ function bop_val(v: ComparisonValue): string {
 }
 
 function order(o: Array<OrderBy>): string {
-  console.log('order', o)
   if(o.length < 1) {
     return "";
   }
@@ -239,8 +233,12 @@ function query(t: Array<TableRelationships>, r: QueryRequest): string {
   return tag('query', `SELECT ${q} as data`);
 }
 
-function output(r: any): Array<ProjectedRow> {
-  return JSON.parse(r[0].data); // TODO: What to do if there are no results? (Should be impossible.)
+/** Format the DB response into a /query response.
+ * 
+ * Note: There should always be one result since 0 rows still generates an empty JSON array.
+ */
+function output(r: any): QueryResponse {
+  return JSON.parse(r[0].data);
 }
 
 /** Function to add SQL comments to the generated SQL to tag which procedures generated what text.
@@ -307,14 +305,12 @@ function tag(t: string, s: string): string {
  * sqlite> select json_group_array(j) from (select json_object('who', name, 'album', (select json_group_array(k) from (select json_object('t', Title) as k from Album where Album.artistId = Artist.artistId))) as j from artist where name not like '%Aero%' limit 5 offset 1);
  *   [{"who":"Accept","album":[{"t":"Balls to the Wall"},{"t":"Restless and Wild"}]},{"who":"Alanis Morissette","album":[{"t":"Jagged Little Pill"}]},{"who":"Alice In Chains","album":[{"t":"Facelift"}]},{"who":"Antônio Carlos Jobim","album":[{"t":"Warner 25 Anos"},{"t":"Chill: Brazil (Disc 2)"}]},{"who":"Apocalyptica","album":[{"t":"Plays Metallica By Four Cellos"}]}]
  */
-export async function queryData(config: Config, queryRequest: QueryRequest): Promise<Array<ProjectedRow>> {
-  console.log(queryRequest);
+export async function queryData(config: Config, queryRequest: QueryRequest): Promise<QueryResponse> {
   const db     = connect(config); // TODO: Should this be cached?
-  escapeSQL    = (s: string) => db.escape(s); // Set globally for this module
+  escapeSQL    = (s: string) => db.escape(s); // Set globally for this module - TODO: Should this have options for what to escape? E.g. table-name, string, etc.
   const q      = query(queryRequest.table_relationships, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
-  console.log('output', o);
   return o;
 }
 

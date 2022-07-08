@@ -1,4 +1,4 @@
-import { SchemaResponse, ScalarType, Table, ColumnInfo } from "./types/schema"
+import { SchemaResponse, ScalarType, ColumnInfo, TableInfo } from "./types"
 import { Config } from "./config";
 import { connect } from './db';
 import { Sequelize } from 'sequelize';
@@ -52,11 +52,12 @@ function columnCast(c: string): ScalarType {
     case "string":
     case "number":
     case "bool":    return c as ScalarType;
-    case "integer": return ScalarType.Number
-    case "double":  return ScalarType.Number
-    case "float":   return ScalarType.Number
-    case "text":    return ScalarType.String
-    default:        return ScalarType.String
+    case "boolean": return "bool";
+    case "integer": return "number";
+    case "double":  return "number";
+    case "float":   return "number";
+    case "text":    return "string";
+    default:        return "string";
       // throw new Error(`Couldn't decode SQLite column type 😭 Unexpected value: ${c}`) 
   }
 }
@@ -75,7 +76,7 @@ function getcols(x : ddlT) : Array<ColumnInfo> {
   )
 }
 
-function format(x : resultT): Table {
+function format(x : resultT): TableInfo {
   return {
     name: x.name,
     ...getpks(x.ddl),
@@ -88,7 +89,7 @@ function isMeta(n : string) {
   return /^(sqlite_|IFK_)/.test(n);
 }
 
-function includeTable(config: Config, table: Table): boolean {
+function includeTable(config: Config, table: TableInfo): boolean {
   if(config.tables === null) {
     if(isMeta(table.name) && ! config.meta) {
       return false;
