@@ -87,6 +87,7 @@ From the HGE repo.
 * [x] Don't create DB option
 * [ ] Verbosity settings
 * [x] Cache settings
+* [x] Missing WHERE clause from object relationships
 
 # Known Bugs
 
@@ -99,21 +100,6 @@ Example:
 ```graphql
 query {
   Artist(where: { Albums: { Name { _eq: "Foo " } } })
-}
-```
-
-## Object Relationships Incorrect
-
-Example:
-
-```graphql
-query MyQuery {
-  Track {
-    Name
-    Album {
-      Title
-    }
-  }
 }
 ```
 
