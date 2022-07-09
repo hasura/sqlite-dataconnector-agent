@@ -28,6 +28,7 @@ function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): stri
       case "column":
         return [`'${k}', ${v.column}`];
       case "relationship":
+        // TODO: Use a for insteand of a map?
         const result = rs.flatMap((x) => {
           if(x.source_table === t) {
             const rel = x.relationships[v.relationship];
@@ -190,15 +191,11 @@ function order(o: Array<OrderBy>): string {
 }
 
 function where(w: Expression | null, j: Array<string>,): string {
-  if(w == null) {
+  const r = [...relationship_where(w), ...j];
+  if(r.length < 1) {
     return "";
   } else {
-    const r = relationship_where(w);
-    if(r.length < 1) {
-      return "";
-    } else {
-      return tag('where',`WHERE ${[...r, ...j].join(" AND ")}`);
-    }
+    return tag('where',`WHERE ${r.join(" AND ")}`);
   }
 }
 

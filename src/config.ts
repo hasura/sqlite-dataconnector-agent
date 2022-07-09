@@ -42,6 +42,12 @@ export const configSchema: ConfigSchemaResponse = {
         description: "By default index tables, etc are not included, set this to true to include them.",
         type: "boolean",
         nullable: true
+      },
+      DEBUG: {
+        description: "For debugging.",
+        type: "object",
+        additionalProperties: true,
+        nullable: true
       }
     }
   },
