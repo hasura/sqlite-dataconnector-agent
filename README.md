@@ -74,7 +74,7 @@ From the HGE repo.
 * [x] Run test-suite from SDK
 * [x] Remove old queries module
 * [x] Relationships / Joins
-* [ ] Rename `resultTT` and other badly named types in the `schema.ts` module
+* [x] Rename `resultTT` and other badly named types in the `schema.ts` module
 * [x] Add ENV Variable for restriction on what databases can be used
 * [x] Update to the latest types
 * [ ] Port back to hge codebase as an official reference agent
