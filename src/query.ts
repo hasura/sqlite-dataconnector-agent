@@ -325,16 +325,6 @@ function tag(t: string, s: string): string {
  * }
  * ```
  * 
- * Example of Raw SQLite queries and results for Reference:
- * 
- * sqlite> select json_group_array(j) from (select json_object('who', name) as j from artist limit 5);
- *   [{"who":"AC/DC"},{"who":"Accept"},{"who":"Aerosmith"},{"who":"Alanis Morissette"},{"who":"Alice In Chains"}]
- * 
- * sqlite> select json_group_array(j) from (select json_object('who', name) as j from artist where name not like '%Aero%' limit 5 offset 1);
- *   [{"who":"Accept"},{"who":"Alanis Morissette"},{"who":"Alice In Chains"},{"who":"Antônio Carlos Jobim"},{"who":"Apocalyptica"}]
- * 
- * sqlite> select json_group_array(j) from (select json_object('who', name, 'album', (select json_group_array(k) from (select json_object('t', Title) as k from Album where Album.artistId = Artist.artistId))) as j from artist where name not like '%Aero%' limit 5 offset 1);
- *   [{"who":"Accept","album":[{"t":"Balls to the Wall"},{"t":"Restless and Wild"}]},{"who":"Alanis Morissette","album":[{"t":"Jagged Little Pill"}]},{"who":"Alice In Chains","album":[{"t":"Facelift"}]},{"who":"Antônio Carlos Jobim","album":[{"t":"Warner 25 Anos"},{"t":"Chill: Brazil (Disc 2)"}]},{"who":"Apocalyptica","album":[{"t":"Plays Metallica By Four Cellos"}]}]
  */
 export async function queryData(config: Config, queryRequest: QueryRequest): Promise<QueryResponse> {
   const db     = connect(config); // TODO: Should this be cached?
