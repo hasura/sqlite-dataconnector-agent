@@ -69,7 +69,7 @@ From the HGE repo.
 * [x] Query
 * [x] Array Relationships
 * [x] Object Relationships
-* [ ] Ensure everything is escaped correctly - https://sequelize.org/api/v6/class/src/sequelize.js~sequelize#instance-method-escape
+* [x] Ensure everything is escaped correctly - https://sequelize.org/api/v6/class/src/sequelize.js~sequelize#instance-method-escape
 * [ ] Or... Use parameterized queries if possible - https://sequelize.org/docs/v6/core-concepts/raw-queries/#bind-parameter
 * [x] Run test-suite from SDK
 * [x] Remove old queries module

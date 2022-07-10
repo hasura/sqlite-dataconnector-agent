@@ -20,13 +20,24 @@ import {
  */
 type Fields = Record<string, Field>
 
-let escapeSQL: (s: string) => string // This is set globally when running queryData;
+let escapeString: (s: string) => string // This is set globally when running queryData;
+
+/**
+ * 
+ * @param c: Unescaped name. E.g. 'Alb"um'
+ * @returns Escaped name. E.g. '"Alb\"um"'
+ */ 
+function escapeColumn(c: string): string {
+  // TODO: Review this function since the current implementation is off the cuff.
+  const result = c.replace(/\\/g,"\\\\").replace(/"/g,'\\"');
+  return `"${result}"`;
+}
 
 function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
   return tag('json_object', omap(fs, (k,v) => {
     switch(v.type) {
       case "column":
-        return [`'${k}', ${v.column}`];
+        return [`${escapeString(k)}, ${escapeColumn(v.column)}`];
       case "relationship":
         // TODO: Use a for insteand of a map?
         const result = rs.flatMap((x) => {
@@ -98,10 +109,10 @@ function array_relationship(
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       if(wOrder.length < 1) {
         return tag('array_relationship',`(
-          SELECT json_group_array(j)
+          SELECT JSON_GROUP_ARRAY(j)
           FROM (
-            SELECT json_object(${json_object(ts, fields, table)}) as j
-            FROM ${table}
+            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
+            FROM ${escapeColumn(table)}
             ${where(wWhere, wJoin)}
             ${limit(wLimit)}
             ${offset(wOffset)}
@@ -114,10 +125,10 @@ function array_relationship(
         return tag('array_relationship',`(
           SELECT JSON_GROUP_ARRAY(j)
           FROM (
-            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) as j
+            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
             FROM (
               SELECT *
-              FROM ${table}
+              FROM ${escapeColumn(table)}
               ${where(wWhere, wJoin)}
               ${order(wOrder)}
               ${limit(wLimit)}
@@ -135,14 +146,17 @@ function object_relationship(
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       return tag('object_relationship',`(
-        SELECT json_object(${json_object(ts, fields, table)}) as j
+        SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
         FROM ${table}
         ${where(null, wJoin)}
       )`);
 }
 
 function relationship(ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
-  const wJoin = omap(r.column_mapping, (k,v) => `${t}.${k} = ${r.target_table}.${v}`);
+  const wJoin = omap(
+    r.column_mapping,
+    (k,v) => `${escapeColumn(t)}.${escapeColumn(k)} = ${escapeColumn(r.target_table)}.${escapeColumn(v)}`
+  );
 
   switch(r.relationship_type) {
     case 'object':
@@ -169,9 +183,9 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
 
 function bop_col(c: ComparisonColumn): string {
   if(c.path.length < 1) {
-    return tag('bop_col',c.name);
+    return tag('bop_col',escapeColumn(c.name));
   } else {
-    return tag('bop_col',c.path.map(escapeSQL).join(".") + "." + escapeSQL(c.name));
+    return tag('bop_col',c.path.map(escapeColumn).join(".") + "." + escapeColumn(c.name));
   }
 }
 
@@ -197,7 +211,7 @@ function bop_op(o: BinaryComparisonOperator): string {
 function bop_val(v: ComparisonValue): string {
   switch(v.type) {
     case "column": return tag('bop_val',`${bop_col(v.column)}`);
-    case "scalar": return tag('bop_val',`${escapeSQL(`${v.value}`)}`);
+    case "scalar": return tag('bop_val',`${escapeString(`${v.value}`)}`);
   }
 }
 
@@ -323,7 +337,7 @@ function tag(t: string, s: string): string {
  */
 export async function queryData(config: Config, queryRequest: QueryRequest): Promise<QueryResponse> {
   const db     = connect(config); // TODO: Should this be cached?
-  escapeSQL    = (s: string) => db.escape(s); // Set globally for this module - TODO: Should this have options for what to escape? E.g. table-name, string, etc.
+  escapeString    = (s: string) => db.escape(s); // Set globally for this module - TODO: Should this have options for what to escape? E.g. table-name, string, etc.
   const q      = query(queryRequest.table_relationships, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
