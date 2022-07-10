@@ -4,30 +4,23 @@ import { connect } from './db';
 
 const SQLiteDDLParser = require('sqlite-ddl-parser');
 
-type columnT = {
+type ColumnInfoInternal = {
   name: string,
   type: string,
   notNull: boolean,
   unique: boolean
 }
 
-type columnOutT = {
-  name: string,
-  type: string,
-  nullable: boolean,
-  description?: string
-}
-
-type ddlT = {
+type DDL_Info = {
   tables: [
     { name: string,
-      columns: [columnT],
+      columns: [ColumnInfoInternal],
       primaryKeys: [string]
     }
   ]
 }
 
-type resultTT = {
+type TableInfoInternal = {
   name: string,
   type: string,
   tbl_name: string,
@@ -35,9 +28,9 @@ type resultTT = {
   sql: string
 }
 
-type resultT = resultTT & { ddl: ddlT }
+type TableInfoInternalWithDDL = TableInfoInternal & { ddl: DDL_Info }
 
-function getpks(x : ddlT) : ({ primary_keys: Array<string>}) {
+function getPKs(x : DDL_Info) : ({ primary_keys: Array<string>}) {
   if(x.tables.length > 0) {
     const t = x.tables[0];
     if(t.primaryKeys.length > 0) {
@@ -47,46 +40,60 @@ function getpks(x : ddlT) : ({ primary_keys: Array<string>}) {
   return {primary_keys: []};
 }
 
-function columnCast(c: string): ScalarType {
-  switch(c) {
+/**
+ * 
+ * @param ColumnInfoInternalype as per HGE DataConnector IR
+ * @returns SQLite's corresponding column type
+ * 
+ * Note: This defaults to "string" when a type is not anticipated
+ *       in order to be as permissive as possible but logs when
+ *       this happens.
+ */
+function columnCast(ColumnInfoInternalype: string): ScalarType {
+  switch(ColumnInfoInternalype) {
     case "string":
     case "number":
-    case "bool":    return c as ScalarType;
+    case "bool":    return ColumnInfoInternalype as ScalarType;
     case "boolean": return "bool";
     case "integer": return "number";
     case "double":  return "number";
     case "float":   return "number";
     case "text":    return "string";
-    default:        return "string";
-      // throw new Error(`Couldn't decode SQLite column type 😭 Unexpected value: ${c}`) 
+    default:
+      console.log(`Unknown SQLite column type: ${ColumnInfoInternalype}. Interpreting as string.`) 
+      return "string";
   }
 }
 
-function getcols(x : ddlT) : Array<ColumnInfo> {
+function getColumns(x : DDL_Info) : Array<ColumnInfo> {
   return x.tables.flatMap(t =>
     t.columns.map((c) => {
-      console.log(t)
-      console.log(c)
       return ({
         name: c.name,
-        type: columnCast(c.type), // TODO: This cast is dubious
+        type: columnCast(c.type),
         nullable: (!c.notNull)
       })
     })
   )
 }
 
-function format(x : resultT): TableInfo {
+function formatTableInfo(x : TableInfoInternalWithDDL): TableInfo {
   return {
     name: x.name,
-    ...getpks(x.ddl),
+    ...getPKs(x.ddl),
     description: x.sql,
-    columns: getcols(x.ddl)
+    columns: getColumns(x.ddl)
   }
 }
 
-function isMeta(n : string) {
-  return /^(sqlite_|IFK_)/.test(n);
+/** 
+ * @param tableName
+ * @returns true if the table is an SQLite meta table such as a sequence, or sqlite_info.
+ * 
+ * Note: This is currently tested for by the regex /^(sqlite_|IFK_)/ and may be brittle.
+ */
+function isMeta(tableName : string) {
+  return /^(sqlite_|IFK_)/.test(tableName);
 }
 
 function includeTable(config: Config, table: TableInfo): boolean {
@@ -101,12 +108,13 @@ function includeTable(config: Config, table: TableInfo): boolean {
 }
 
 export async function getSchema(config: Config): Promise<SchemaResponse> {
-  const db                  = connect(config);
-  const [results, metadata] = await db.query("SELECT * from sqlite_schema");
-  const resultsT            = results as unknown as Array<resultTT>;
-  const withDDL             = resultsT.map(e => ({ddl: SQLiteDDLParser.parse(e.sql) as ddlT, ...e}) );
+  const db                                        = connect(config);
+  const [results, metadata]                       = await db.query("SELECT * from sqlite_schema");
+  const resultsT: Array<TableInfoInternal>        = results as unknown as Array<TableInfoInternal>;
+  const withDDL:  Array<TableInfoInternalWithDDL> = resultsT.map(e => ({ddl: SQLiteDDLParser.parse(e.sql) as DDL_Info, ...e}) );
+  const result:   Array<TableInfo>                = withDDL.map(formatTableInfo).filter(table => includeTable(config,table))
 
   return {
-    tables: withDDL.map(format).filter(table => includeTable(config,table))
+    tables: result
   };
 };
