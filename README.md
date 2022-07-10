@@ -18,7 +18,7 @@ This directory contains an SQLite implementation of a data connector agent.
 
 ## Options / Environment Variables
 
-* ENV: `PORT=[INT]` - Port for agent to listen on. Default: 8100
+* ENV: `PORT=[INT]` - Port for agent to listen on. 8100 by default.
 * ENV: `PERMISSIVE_CORS={1|true|yes}` - Allows all requests - Useful for testing with SwaggerUI. Turn off on production.
 * ENV: `DB_CREATE={1|true|yes}` - Allows new databases to be created, not permitted by default.
 * ENV: `DB_READONLY={1|true|yes}` - Makes databases readonly, they are read-write by default.
