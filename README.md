@@ -70,7 +70,7 @@ From the HGE repo.
 * [x] Array Relationships
 * [x] Object Relationships
 * [ ] Ensure everything is escaped correctly
-* [ ] Or... Use parameterized queries if possible
+* [ ] Or... Use parameterized queries if possible - https://sequelize.org/docs/v6/core-concepts/raw-queries/#bind-parameter
 * [x] Run test-suite from SDK
 * [x] Remove old queries module
 * [x] Relationships / Joins
