@@ -107,6 +107,7 @@ function array_relationship(
     wOrder: Array<OrderBy>,
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
+      // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
         return tag('array_relationship',`(
           SELECT JSON_GROUP_ARRAY(j)
