@@ -91,76 +91,8 @@ From the HGE repo.
 
 # Known Bugs
 
-## Where criteria for related tables
+## ORDER clause not sending through direction
 
-Handling `WHERE: {...}` criteria for related tables
+HGE Seems to ignore the direction of ORDER BY clauses and only send 'asc' when performing queries.
 
-Example:
-
-```graphql
-query {
-  Artist(where: { Albums: { Name { _eq: "Foo" } } })
-}
-```
-
-## ORDER BY Breaks Output
-
-Ordering clauses can cause results to be generated incorrectly - rows of strings, as opposed to rows of objects.
-
-```graphql
-query MyQuery {
-  Track(limit: 4, order_by: {Name: desc}) {
-    Name
-    Album {
-      Title
-    }
-  }
-}
-```
-
-Example:
-
-```sql
-SELECT (
-    SELECT json_group_array(j)
-    FROM (
-        SELECT json_object(
-            'Album', ( SELECT json_object('Title', Title) as j FROM Album),
-            'Name', Name
-        ) as j
-        FROM Track
-        WHERE (Name > 'S')
-        LIMIT 3
-    )
-) as data
-```
-
-Gives
-
-```json
-[{"Album":{"Title":"For Those About To Rock We Salute You"},"Name":"Snowballed"},{"Album":{"Title":"For Those About To Rock We Salute You"},"Name":"Spellbound"},{"Album":{"Title":"For Those About To Rock We Salute You"},"Name":"Whole Lotta Rosie"}]
-```
-
-while
-
-```sql
-SELECT  (
-    SELECT json_group_array(j)
-    FROM (
-        SELECT json_object(
-            'Album',  (SELECT json_object('Title', Title) as j FROM Album),
-            'Name', Name
-        ) as j
-        FROM Track
-        WHERE (Name > 'S')
-        ORDER BY Name asc 
-        LIMIT 3 
-    )
-)  as data
-```
-
-Gives
-
-```json
-["{\"Album\":{\"Title\":\"For Those About To Rock We Salute You\"},\"Name\":\"Sabbra Cadabra\"}","{\"Album\":{\"Title\":\"For Those About To Rock We Salute You\"},\"Name\":\"Sad But True\"}","{\"Album\":{\"Title\":\"For Those About To Rock We Salute You\"},\"Name\":\"Salgueiro\"}"]
-```
+This isn't a bug in the SQLite implementation, but noting here for reference.
