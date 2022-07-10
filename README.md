@@ -99,13 +99,24 @@ Example:
 
 ```graphql
 query {
-  Artist(where: { Albums: { Name { _eq: "Foo " } } })
+  Artist(where: { Albums: { Name { _eq: "Foo" } } })
 }
 ```
 
 ## ORDER BY Breaks Output
 
 Ordering clauses can cause results to be generated incorrectly - rows of strings, as opposed to rows of objects.
+
+```graphql
+query MyQuery {
+  Track(limit: 4, order_by: {Name: desc}) {
+    Name
+    Album {
+      Title
+    }
+  }
+}
+```
 
 Example:
 

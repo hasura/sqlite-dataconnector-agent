@@ -96,16 +96,35 @@ function array_relationship(
     wOrder: Array<OrderBy>,
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
-      return tag('array_relationship',`(
-        SELECT json_group_array(j)
-        FROM (
-          SELECT json_object(${json_object(ts, fields, table)}) as j
-          FROM ${table}
-          ${where(wWhere, wJoin)}
-          ${order(wOrder)}
-          ${limit(wLimit)}
-          ${offset(wOffset)}
-        ))`);
+      if(wOrder.length < 1) {
+        return tag('array_relationship',`(
+          SELECT json_group_array(j)
+          FROM (
+            SELECT json_object(${json_object(ts, fields, table)}) as j
+            FROM ${table}
+            ${where(wWhere, wJoin)}
+            ${limit(wLimit)}
+            ${offset(wOffset)}
+          ))`);
+      } else {
+        // NOTE: Rationale for subselect in FROM clause:
+        // 
+        // There seems to be a bug in SQLite where an ORDER clause in this position causes ARRAY_RELATIONSHIP
+        // to return rows as JSON strings instead of JSON objects. This is worked around by using a subselect.
+        return tag('array_relationship',`(
+          SELECT JSON_GROUP_ARRAY(j)
+          FROM (
+            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) as j
+            FROM (
+              SELECT *
+              FROM ${table}
+              ${where(wWhere, wJoin)}
+              ${order(wOrder)}
+              ${limit(wLimit)}
+              ${offset(wOffset)}
+            ) AS ${table}
+          ))`);
+      }
 }
 
 function object_relationship(
