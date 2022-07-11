@@ -55,6 +55,7 @@ function columnCast(ColumnInfoInternalype: string): ScalarType {
     case "number":
     case "bool":    return ColumnInfoInternalype as ScalarType;
     case "boolean": return "bool";
+    case "numeric": return "number";
     case "integer": return "number";
     case "double":  return "number";
     case "float":   return "number";
