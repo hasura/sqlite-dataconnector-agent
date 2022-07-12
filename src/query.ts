@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap }    from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -16,20 +16,25 @@ import {
     Field, 
   } from "./types";
 
+var SqlString = require('sqlstring-sqlite');
+
 /** Helper type for convenience.
  */
 type Fields = Record<string, Field>
 
-let escapeString: (s: string) => string // This is set globally when running queryData;
+// let escapeString: (s: string) => string // This is set globally when running queryData;
+function escapeString(s: string): string {
+  return SqlString.escape(s);
+}
 
 /**
  * 
- * @param c: Unescaped name. E.g. 'Alb"um'
+ * @param identifier: Unescaped name. E.g. 'Alb"um'
  * @returns Escaped name. E.g. '"Alb\"um"'
  */ 
-function escapeIdentifier(c: string): string {
+function escapeIdentifier(identifier: string): string {
   // TODO: Review this function since the current implementation is off the cuff.
-  const result = c.replace(/\\/g,"\\\\").replace(/"/g,'\\"');
+  const result = identifier.replace(/\\/g,"\\\\").replace(/"/g,'\\"');
   return `"${result}"`;
 }
 
@@ -328,7 +333,6 @@ function tag(t: string, s: string): string {
  */
 export async function queryData(config: Config, queryRequest: QueryRequest): Promise<QueryResponse> {
   const db     = connect(config); // TODO: Should this be cached?
-  escapeString    = (s: string) => db.escape(s); // Set globally for this module - TODO: Should this have options for what to escape? E.g. table-name, string, etc.
   const q      = query(queryRequest.table_relationships, queryRequest);
   const [r, m] = await db.query(q);
   const o      = output(r);
