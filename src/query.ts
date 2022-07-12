@@ -22,9 +22,8 @@ const SqlString = require('sqlstring-sqlite');
  */
 type Fields = Record<string, Field>
 
-// let escapeString: (s: string) => string // This is set globally when running queryData;
-function escapeString(s: string): string {
-  return SqlString.escape(s);
+function escapeString(x: any): string {
+  return SqlString.escape(x);
 }
 
 /**
@@ -96,7 +95,7 @@ function relationship_where(w: Expression | null): Array<string> {
         return [`${bop_col(w.column)} ${bop} ${bop_val(w.value)}`];
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
-        return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => `'${v}'`).join(", ")}))`];
+        return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => escapeString(v)).join(", ")}))`];
     }
     return [];
   }
@@ -217,7 +216,7 @@ function bop_op(o: BinaryComparisonOperator): string {
 function bop_val(v: ComparisonValue): string {
   switch(v.type) {
     case "column": return tag('bop_val',`${bop_col(v.column)}`);
-    case "scalar": return tag('bop_val',`${escapeString(`${v.value}`)}`);
+    case "scalar": return tag('bop_val', escapeString(v.value));
   }
 }
 
