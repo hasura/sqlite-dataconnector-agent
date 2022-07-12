@@ -27,7 +27,7 @@ let escapeString: (s: string) => string // This is set globally when running que
  * @param c: Unescaped name. E.g. 'Alb"um'
  * @returns Escaped name. E.g. '"Alb\"um"'
  */ 
-function escapeColumn(c: string): string {
+function escapeIdentifier(c: string): string {
   // TODO: Review this function since the current implementation is off the cuff.
   const result = c.replace(/\\/g,"\\\\").replace(/"/g,'\\"');
   return `"${result}"`;
@@ -37,7 +37,7 @@ function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): stri
   return tag('json_object', omap(fs, (k,v) => {
     switch(v.type) {
       case "column":
-        return [`${escapeString(k)}, ${escapeColumn(v.column)}`];
+        return [`${escapeString(k)}, ${escapeIdentifier(v.column)}`];
       case "relationship":
         // TODO: Use a for insteand of a map?
         const result = rs.flatMap((x) => {
@@ -113,7 +113,7 @@ function array_relationship(
           SELECT JSON_GROUP_ARRAY(j)
           FROM (
             SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
-            FROM ${escapeColumn(table)}
+            FROM ${escapeIdentifier(table)}
             ${where(wWhere, wJoin)}
             ${limit(wLimit)}
             ${offset(wOffset)}
@@ -129,7 +129,7 @@ function array_relationship(
             SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
             FROM (
               SELECT *
-              FROM ${escapeColumn(table)}
+              FROM ${escapeIdentifier(table)}
               ${where(wWhere, wJoin)}
               ${order(wOrder)}
               ${limit(wLimit)}
@@ -156,7 +156,7 @@ function object_relationship(
 function relationship(ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
   const wJoin = omap(
     r.column_mapping,
-    (k,v) => `${escapeColumn(t)}.${escapeColumn(k)} = ${escapeColumn(r.target_table)}.${escapeColumn(v)}`
+    (k,v) => `${escapeIdentifier(t)}.${escapeIdentifier(k)} = ${escapeIdentifier(r.target_table)}.${escapeIdentifier(v)}`
   );
 
   switch(r.relationship_type) {
@@ -184,9 +184,9 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
 
 function bop_col(c: ComparisonColumn): string {
   if(c.path.length < 1) {
-    return tag('bop_col',escapeColumn(c.name));
+    return tag('bop_col',escapeIdentifier(c.name));
   } else {
-    return tag('bop_col',c.path.map(escapeColumn).join(".") + "." + escapeColumn(c.name));
+    return tag('bop_col',c.path.map(escapeIdentifier).join(".") + "." + escapeIdentifier(c.name));
   }
 }
 

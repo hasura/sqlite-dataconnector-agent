@@ -17,7 +17,6 @@ export const crossProduct = <T, U>(arr1: T[], arr2: U[]): [T,U][] => {
   return arr1.flatMap(a1 => arr2.map(a2 => [a1, a2]) as [T,U][]);
 };
 
-// export function omap<K,V,X>(a: Record<K,V>, f: (K,V) => X): Array<X> {
 export function omap<V,O>(m: { [x: string]: V; },f: (k: string, v: V) => O) {
   return Object.keys(m).map(k => f(k, m[k]))
 }
