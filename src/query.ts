@@ -18,7 +18,7 @@ import {
 
 const SqlString = require('sqlstring-sqlite');
 
-/** Helper type for convenience.
+/** Helper type for convenience. Uses the sqlstring-sqlite library, but should ideally use the function in sequalize.
  */
 type Fields = Record<string, Field>
 
@@ -37,23 +37,23 @@ function escapeIdentifier(identifier: string): string {
   return `"${result}"`;
 }
 
-function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
-  const result = omap(fs, (k,v) => {
+function json_object(ts: Array<TableRelationships>, fields: Fields, table: string): string {
+  const result = omap(fields, (k,v) => {
     switch(v.type) {
       case "column":
         return [`${escapeString(k)}, ${escapeIdentifier(v.column)}`];
       case "relationship":
-        const result = rs.flatMap((x) => {
-          if(x.source_table === t) {
+        const result = ts.flatMap((x) => {
+          if(x.source_table === table) {
             const rel = x.relationships[v.relationship];
             if(rel) {
-              return [`'${k}', ${relationship(rs, rel, v, t)}`];
+              return [`'${k}', ${relationship(ts, rel, v, table)}`];
             }
           }
           return [];
         });
         if(result.length < 1) {
-          console.log("Couldn't find relationship for field", k, v, rs);
+          console.log("Couldn't find relationship for field", k, v, ts);
         }
         return result;
     }
@@ -158,10 +158,10 @@ function object_relationship(
       )`);
 }
 
-function relationship(ts: Array<TableRelationships>, r: Relationship, f: RelationshipField, t: string): string {
+function relationship(ts: Array<TableRelationships>, r: Relationship, field: RelationshipField, table: string): string {
   const wJoin = omap(
     r.column_mapping,
-    (k,v) => `${escapeIdentifier(t)}.${escapeIdentifier(k)} = ${escapeIdentifier(r.target_table)}.${escapeIdentifier(v)}`
+    (k,v) => `${escapeIdentifier(table)}.${escapeIdentifier(k)} = ${escapeIdentifier(r.target_table)}.${escapeIdentifier(v)}`
   );
 
   switch(r.relationship_type) {
@@ -170,7 +170,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
         ts,
         r.target_table,
         wJoin,
-        f.query.fields,
+        field.query.fields,
       ));
 
     case 'array':
@@ -178,11 +178,11 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, f: Relatio
         ts,
         r.target_table,
         wJoin,
-        f.query.fields,
-        coerceUndefinedToNull(f.query.where),
-        coerceUndefinedToNull(f.query.limit),
-        coerceUndefinedToNull(f.query.offset),
-        coerceUndefinedOrNullToEmptyArray(f.query.order_by),
+        field.query.fields,
+        coerceUndefinedToNull(field.query.where),
+        coerceUndefinedToNull(field.query.limit),
+        coerceUndefinedToNull(field.query.offset),
+        coerceUndefinedOrNullToEmptyArray(field.query.order_by),
       ));
   }
 }
@@ -215,7 +215,7 @@ function bop_op(o: BinaryComparisonOperator): string {
 
 function bop_val(v: ComparisonValue): string {
   switch(v.type) {
-    case "column": return tag('bop_val',`${bop_col(v.column)}`);
+    case "column": return tag('bop_val', bop_col(v.column));
     case "scalar": return tag('bop_val', escapeString(v.value));
   }
 }
@@ -228,12 +228,17 @@ function order(o: Array<OrderBy>): string {
   return tag('order',`ORDER BY ${result}`);
 }
 
-function where(w: Expression | null, j: Array<string>,): string {
-  const r = [...relationship_where(w), ...j];
-  if(r.length < 1) {
+/**
+ * @param whereArray Expressions used in the associated where clause
+ * @param joinArray Join clauses
+ * @returns string representing the combined where clause
+ */ 
+function where(whereArray: Expression | null, joinArray: Array<string>,): string {
+  const clauses = [...relationship_where(whereArray), ...joinArray];
+  if(clauses.length < 1) {
     return "";
   } else {
-    return tag('where',`WHERE ${r.join(" AND ")}`);
+    return tag('where',`WHERE ${clauses.join(" AND ")}`);
   }
 }
 
@@ -253,27 +258,28 @@ function offset(o: number | null): string {
   }
 }
 
-// TODO: Could the depth of recursion be a problem?
-function query(t: Array<TableRelationships>, r: QueryRequest): string {
-  const q = array_relationship(
-    r.table_relationships,
-    r.table,
+/** Top-Level Query Function.
+ */
+function query(request: QueryRequest): string {
+  const result = array_relationship(
+    request.table_relationships,
+    request.table,
     [],
-    r.query.fields,
-    coerceUndefinedToNull(r.query.where),
-    coerceUndefinedToNull(r.query.limit),
-    coerceUndefinedToNull(r.query.offset),
-    coerceUndefinedOrNullToEmptyArray(r.query.order_by),
+    request.query.fields,
+    coerceUndefinedToNull(request.query.where),
+    coerceUndefinedToNull(request.query.limit),
+    coerceUndefinedToNull(request.query.offset),
+    coerceUndefinedOrNullToEmptyArray(request.query.order_by),
     );
-  return tag('query', `SELECT ${q} as data`);
+  return tag('query', `SELECT ${result} as data`);
 }
 
 /** Format the DB response into a /query response.
  * 
  * Note: There should always be one result since 0 rows still generates an empty JSON array.
  */
-function output(r: any): QueryResponse {
-  return JSON.parse(r[0].data);
+function output(rows: any): QueryResponse {
+  return JSON.parse(rows[0].data);
 }
 
 /** Function to add SQL comments to the generated SQL to tag which procedures generated what text.
@@ -331,10 +337,10 @@ function tag(t: string, s: string): string {
  * 
  */
 export async function queryData(config: Config, queryRequest: QueryRequest): Promise<QueryResponse> {
-  const db     = connect(config); // TODO: Should this be cached?
-  const q      = query(queryRequest.table_relationships, queryRequest);
-  const [r, m] = await db.query(q);
-  const o      = output(r);
-  return o;
+  const db = connect(config); // TODO: Should this be cached?
+  const q = query(queryRequest);
+  const [result, metadata] = await db.query(q);
+
+  return output(result);
 }
 
