@@ -199,7 +199,6 @@ function bop_array(o: BinaryArrayComparisonOperator): string {
 function bop_op(o: BinaryComparisonOperator): string {
   let result;
   switch(o) {
-    // 'less_than' | 'less_than_or_equal' | 'greater_than' | 'greater_than_or_equal' | 'equal';
     case 'equal':                 result = "="; break;
     case 'greater_than':          result = ">"; break;
     case 'greater_than_or_equal': result = ">="; break;
