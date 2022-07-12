@@ -16,7 +16,7 @@ import {
     Field, 
   } from "./types";
 
-var SqlString = require('sqlstring-sqlite');
+const SqlString = require('sqlstring-sqlite');
 
 /** Helper type for convenience.
  */
