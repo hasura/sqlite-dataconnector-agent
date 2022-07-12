@@ -39,7 +39,6 @@ function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): stri
       case "column":
         return [`${escapeString(k)}, ${escapeIdentifier(v.column)}`];
       case "relationship":
-        // TODO: Use a for insteand of a map?
         const result = rs.flatMap((x) => {
           if(x.source_table === t) {
             const rel = x.relationships[v.relationship];
