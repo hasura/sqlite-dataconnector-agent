@@ -34,7 +34,7 @@ function escapeIdentifier(c: string): string {
 }
 
 function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): string {
-  return tag('json_object', omap(fs, (k,v) => {
+  const result = omap(fs, (k,v) => {
     switch(v.type) {
       case "column":
         return [`${escapeString(k)}, ${escapeIdentifier(v.column)}`];
@@ -53,7 +53,9 @@ function json_object(rs: Array<TableRelationships>, fs: Fields, t: string): stri
         }
         return result;
     }
-  }).flatMap((e) => e).join(", "));
+  }).flatMap((e) => e).join(", ");
+
+  return tag('json_object', `JSON_OBJECT(${result})`);
 }
 
 function relationship_where(w: Expression | null): Array<string> {
@@ -111,7 +113,7 @@ function array_relationship(
         return tag('array_relationship',`(
           SELECT JSON_GROUP_ARRAY(j)
           FROM (
-            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
+            SELECT ${json_object(ts, fields, table)} AS j
             FROM ${escapeIdentifier(table)}
             ${where(wWhere, wJoin)}
             ${limit(wLimit)}
@@ -125,7 +127,7 @@ function array_relationship(
         return tag('array_relationship',`(
           SELECT JSON_GROUP_ARRAY(j)
           FROM (
-            SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
+            SELECT ${json_object(ts, fields, table)} AS j
             FROM (
               SELECT *
               FROM ${escapeIdentifier(table)}
@@ -146,7 +148,7 @@ function object_relationship(
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       return tag('object_relationship',`(
-        SELECT JSON_OBJECT(${json_object(ts, fields, table)}) AS j
+        SELECT ${json_object(ts, fields, table)} AS j
         FROM ${table}
         ${where(null, wJoin)}
       )`);
