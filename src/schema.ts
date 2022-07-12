@@ -30,9 +30,9 @@ type TableInfoInternal = {
 
 type TableInfoInternalWithDDL = TableInfoInternal & { ddl: DDL_Info }
 
-function getPKs(x : DDL_Info) : ({ primary_keys: Array<string>}) {
-  if(x.tables.length > 0) {
-    const t = x.tables[0];
+function getPKs(info : DDL_Info) : ({ primary_keys: Array<string>}) {
+  if(info.tables.length > 0) {
+    const t = info.tables[0];
     if(t.primaryKeys.length > 0) {
       return {primary_keys: t.primaryKeys}
     }
@@ -66,8 +66,8 @@ function columnCast(ColumnInfoInternalype: string): ScalarType {
   }
 }
 
-function getColumns(x : DDL_Info) : Array<ColumnInfo> {
-  return x.tables.flatMap(t =>
+function getColumns(info : DDL_Info) : Array<ColumnInfo> {
+  return info.tables.flatMap(t =>
     t.columns.map((c) => {
       return ({
         name: c.name,
@@ -78,12 +78,12 @@ function getColumns(x : DDL_Info) : Array<ColumnInfo> {
   )
 }
 
-function formatTableInfo(x : TableInfoInternalWithDDL): TableInfo {
+function formatTableInfo(info : TableInfoInternalWithDDL): TableInfo {
   return {
-    name: x.name,
-    ...getPKs(x.ddl),
-    description: x.sql,
-    columns: getColumns(x.ddl)
+    name: info.name,
+    ...getPKs(info.ddl),
+    description: info.sql,
+    columns: getColumns(info.ddl)
   }
 }
 
