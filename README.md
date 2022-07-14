@@ -89,6 +89,9 @@ From the HGE repo.
 * [ ] Verbosity settings
 * [x] Cache settings
 * [x] Missing WHERE clause from object relationships
+* [ ] Reuse `find_table_relationship` in more scenarios
+* [x] Check that looped exist check doesn't cause name conflicts
+* [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`
 
 # Known Bugs
 

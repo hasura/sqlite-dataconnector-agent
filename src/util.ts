@@ -24,3 +24,7 @@ export function omap<V,O>(m: { [x: string]: V; },f: (k: string, v: V) => O) {
 export function stringToBool(x: string | null | undefined): boolean {
   return (/1|true|t|yes|y/i).test(x || '');
 }
+
+export function last<T>(x: Array<T>): T {
+  return x[x.length - 1];
+}
