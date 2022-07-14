@@ -98,14 +98,14 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
       case "binary_op":
         const bop = bop_op(w.operator);
         if(w.column.path.length < 1) {
-          return [`${bop_col(w.column)} ${bop} ${bop_val(w.value)}`];
+          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value)}`];
         } else {
           return [exists(ts, w.column, t, `${bop} ${bop_val(w.value)}`)];
         }
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
         if(w.column.path.length < 1) {
-          return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => escapeString(v)).join(", ")}))`];
+          return [`(${escapeIdentifier(w.column.name)} ${bopA} (${w.values.map(v => escapeString(v)).join(", ")}))`];
         } else {
           return [exists(ts,w.column,t, `${bopA} (${w.values.map(v => escapeString(v)).join(", ")})`)];
         }
@@ -257,11 +257,12 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
   }
 }
 
+// TODO: There is a bug in this implementation where vals can reference columns with paths.
 function bop_col(c: ComparisonColumn): string {
   if(c.path.length < 1) {
     return tag('bop_col',escapeIdentifier(c.name));
   } else {
-    return tag('bop_col',c.path.map(escapeIdentifier).join(".") + "." + escapeIdentifier(c.name));
+    throw new Error(`bop_col shouldn't be handling paths.`);
   }
 }
 
