@@ -14,7 +14,6 @@ import {
     OrderBy,
     QueryResponse,
     Field,
-    ColumnInfo, 
   } from "./types";
 
 const SqlString = require('sqlstring-sqlite');
