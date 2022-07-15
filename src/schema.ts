@@ -30,14 +30,14 @@ type TableInfoInternal = {
 
 type TableInfoInternalWithDDL = TableInfoInternal & { ddl: DDL_Info }
 
-function getPKs(info : DDL_Info) : ({ primary_keys: Array<string>}) {
+function getPKs(info : DDL_Info) : ({ primary_key: Array<string>}) {
   if(info.tables.length > 0) {
     const t = info.tables[0];
     if(t.primaryKeys.length > 0) {
-      return {primary_keys: t.primaryKeys}
+      return {primary_key: t.primaryKeys}
     }
   }
-  return {primary_keys: []};
+  return {primary_key: []};
 }
 
 /**

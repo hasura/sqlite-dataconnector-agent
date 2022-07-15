@@ -48,7 +48,9 @@ You will want to mount a volume with your database(s) so that they can be refere
 
 # Dataset
 
-The dataset used for testing the reference agent is sourced from https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
+The dataset used for testing the reference agent is sourced from:
+
+* https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
 
 # Testing Changes to the Agent
 

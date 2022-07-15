@@ -97,9 +97,9 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
       case "binary_op":
         const bop = bop_op(w.operator);
         if(w.column.path.length < 1) {
-          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value)}`];
+          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value, t)}`];
         } else {
-          return [exists(ts, w.column, t, `${bop} ${bop_val(w.value)}`)];
+          return [exists(ts, w.column, t, `${bop} ${bop_val(w.value, t)}`)];
         }
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
@@ -257,9 +257,9 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
 }
 
 // TODO: There is a bug in this implementation where vals can reference columns with paths.
-function bop_col(c: ComparisonColumn): string {
+function bop_col(c: ComparisonColumn, t: string): string {
   if(c.path.length < 1) {
-    return tag('bop_col',escapeIdentifier(c.name));
+    return tag('bop_col', `${escapeIdentifier(t)}.${escapeIdentifier(c.name)}`);
   } else {
     throw new Error(`bop_col shouldn't be handling paths.`);
   }
@@ -283,9 +283,9 @@ function bop_op(o: BinaryComparisonOperator): string {
   return tag('bop_op',result);
 }
 
-function bop_val(v: ComparisonValue): string {
+function bop_val(v: ComparisonValue, t: string): string {
   switch(v.type) {
-    case "column": return tag('bop_val', bop_col(v.column));
+    case "column": return tag('bop_val', bop_col(v.column, t));
     case "scalar": return tag('bop_val', escapeString(v.value));
   }
 }
