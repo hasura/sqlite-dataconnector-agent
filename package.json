@@ -27,7 +27,6 @@
     "pino-pretty": "^8.0.0",
     "sequelize": "^6.21.2",
     "sqlite": "^4.1.1",
-    "sqlite-ddl-parser": "^0.1.0",
     "sqlite-parser": "^1.0.1",
     "sqlite3": "^5.0.8",
     "sqlstring-sqlite": "^0.1.1",
