@@ -11,9 +11,16 @@ This directory contains an SQLite implementation of a data connector agent.
 
 ## Build & Run
 
+```sh
+npm install
+npm run build
+npm run start
 ```
-> npm install
-> npm start
+
+Or a simple dev-loop via `entr`:
+
+```sh
+echo src/**/*.ts | xargs -n1 echo | DB_READONLY=y entr -r npm run start
 ```
 
 ## Options / Environment Variables
