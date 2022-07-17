@@ -113,7 +113,8 @@ From the HGE repo.
     sqlite> select 1 where exists(select * from test where testid is not null);
     1
     sqlite> select 1 where not exists(select * from test where testid is null);
-    sqlite> select 1 where not exists(select * from test where testid is not null);
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    1
 
 # Known Bugs
 
