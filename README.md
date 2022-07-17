@@ -94,6 +94,8 @@ From the HGE repo.
 * [ ] Reuse `find_table_relationship` in more scenarios
 * [x] Check that looped exist check doesn't cause name conflicts
 * [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`, Example:
+    sqlite> create table test(testid string);
+    sqlite> .schema
     CREATE TABLE test(testid string);
     sqlite> select 1 where exists(select * from test where testid is null);
     sqlite> select 1 where exists(select * from test where testid is not null);
@@ -101,6 +103,17 @@ From the HGE repo.
     1
     sqlite> select 1 where not exists(select * from test where testid is not null);
     1
+    sqlite> insert into test(testid) values('foo');
+    sqlite> insert into test(testid) values(NULL);
+    sqlite> select * from test;
+    foo
+
+    sqlite> select 1 where exists(select * from test where testid is null);
+    1
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    1
+    sqlite> select 1 where not exists(select * from test where testid is null);
+    sqlite> select 1 where not exists(select * from test where testid is not null);
 
 # Known Bugs
 
