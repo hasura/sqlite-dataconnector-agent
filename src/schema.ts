@@ -1,9 +1,7 @@
 import { SchemaResponse, ScalarType, ColumnInfo, TableInfo } from "./types"
 import { Config } from "./config";
 import { connect } from './db';
-import { logDeep } from "./util";
 
-const SQLiteDDLParser = require('sqlite-ddl-parser');
 var sqliteParser = require('sqlite-parser');
 
 type ColumnInfoInternal = {
@@ -68,19 +66,7 @@ function columnCast(ColumnInfoInternalype: string): ScalarType {
   }
 }
 
-function getColumns(info : DDL_Info) : Array<ColumnInfo> {
-  return info.tables.flatMap(t =>
-    t.columns.map(c => {
-      return ({
-        name: c.name,
-        type: columnCast(c.type),
-        nullable: (!c.notNull)
-      })
-    })
-  )
-}
-
-function getColumns2(ast : Array<any>) : Array<ColumnInfo> {
+function getColumns(ast : Array<any>) : Array<ColumnInfo> {
   return ast.map(c => {
     return ({
       name: c.name,
@@ -107,19 +93,18 @@ function nullableCast(ds: Array<any>): boolean {
   return true;
 }
 
-function formatTableInfo(info : TableInfoInternalWithDDL): TableInfo {
+function formatTableInfo(info : TableInfoInternal): TableInfo {
   const ast = sqliteParser(info.sql);
   const ddl = ddlColumns(ast);
-  // const columns = getColumns(info.ddl);
-  // const columns2 = getColumns2(ddl);
-  // logDeep("columns", columns);
-  // logDeep("columns2", columns2);
+  const pks = ddlPKs(ast);
+  const pk  = pks.length > 0 ? { primary_key: pks } : {};
 
+  // TODO: Should we include something for the description here?
   return {
     name: info.name,
-    ...getPKs(info.ddl),
+    ...pk,
     description: info.sql,
-    columns: getColumns2(ddl)
+    columns: getColumns(ddl)
   }
 }
 
@@ -142,6 +127,14 @@ function includeTable(config: Config, table: TableInfoInternal): boolean {
   }
 }
 
+/**
+ * Pulls columns from the output of sqlite-parser.
+ * Note that this doesn't check if duplicates are present and will emit them as many times as they are present.
+ * This is done as an easy way to preserve order.
+ * 
+ * @param ddl - The output of sqlite-parser
+ * @returns - List of columns as present in the output of sqlite-parser.
+ */
 function ddlColumns(ddl: any): Array<any> {
   if(ddl.type != 'statement' || ddl.variant != 'list') {
     throw new Error("Encountered a non-statement or non-list when parsing DDL for table.");
@@ -159,8 +152,28 @@ function ddlColumns(ddl: any): Array<any> {
   })
 }
 
-function parseDDL(ddl: string): DDL_Info {
-  return SQLiteDDLParser.parse(ddl) as DDL_Info;
+function ddlPKs(ddl: any): Array<any> {
+  if(ddl.type != 'statement' || ddl.variant != 'list') {
+    throw new Error("Encountered a non-statement or non-list when parsing DDL for table.");
+  }
+  return ddl.statement.flatMap((t: any) => {
+    if(t.type !=  'statement' || t.variant != 'create' || t.format != 'table') {
+      return [];
+    }
+    return t.definition.flatMap((c: any) => {
+      if(c.type != 'definition' || c.variant != 'constraint'
+          || c.definition.length != 1 || c.definition[0].type != 'constraint' || c.definition[0].variant != 'primary key') {
+        return [];
+      }
+      return c.columns.flatMap((x:any) => {
+        if(x.type == 'identifier' && x.variant == 'column') {
+          return [x.name];
+        } else {
+          return [];
+        }
+      });
+    });
+  })
 }
 
 export async function getSchema(config: Config): Promise<SchemaResponse> {
@@ -168,8 +181,7 @@ export async function getSchema(config: Config): Promise<SchemaResponse> {
   const [results, metadata]                       = await db.query("SELECT * from sqlite_schema");
   const resultsT: Array<TableInfoInternal>        = results as unknown as Array<TableInfoInternal>;
   const filtered: Array<TableInfoInternal>        = resultsT.filter(table => includeTable(config,table));
-  const withDDL:  Array<TableInfoInternalWithDDL> = filtered.map(e => ({ddl: parseDDL(e.sql), ...e}) );
-  const result:   Array<TableInfo>                = withDDL.map(formatTableInfo);
+  const result:   Array<TableInfo>                = filtered.map(formatTableInfo);
 
   return {
     tables: result
