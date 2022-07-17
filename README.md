@@ -93,7 +93,14 @@ From the HGE repo.
 * [x] Missing WHERE clause from object relationships
 * [ ] Reuse `find_table_relationship` in more scenarios
 * [x] Check that looped exist check doesn't cause name conflicts
-* [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`
+* [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`, Example:
+    CREATE TABLE test(testid string);
+    sqlite> select 1 where exists(select * from test where testid is null);
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    sqlite> select 1 where not exists(select * from test where testid is null);
+    1
+    sqlite> select 1 where not exists(select * from test where testid is not null);
+    1
 
 # Known Bugs
 
