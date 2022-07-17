@@ -84,7 +84,7 @@ From the HGE repo.
 * [x] Make escapeSQL global to the query module
 * [x] Make CORS permissions configurable
 * [x] Optional DB Allowlist
-* [ ] Fix SDK Test suite to be more flexible about descriptions
+* [x] Fix SDK Test suite to be more flexible about descriptions
 * [x] READONLY option
 * [x] CREATE option
 * [x] Don't create DB option
