@@ -4,40 +4,12 @@ import { connect } from './db';
 
 var sqliteParser = require('sqlite-parser');
 
-type ColumnInfoInternal = {
-  name: string,
-  type: string,
-  notNull: boolean,
-  unique: boolean
-}
-
-type DDL_Info = {
-  tables: [
-    { name: string,
-      columns: [ColumnInfoInternal],
-      primaryKeys: [string]
-    }
-  ]
-}
-
 type TableInfoInternal = {
   name: string,
   type: string,
   tbl_name: string,
   rootpage: Number,
   sql: string
-}
-
-type TableInfoInternalWithDDL = TableInfoInternal & { type: string, ddl: DDL_Info }
-
-function getPKs(info : DDL_Info) : ({ primary_key: Array<string>}) {
-  if(info.tables.length > 0) {
-    const t = info.tables[0];
-    if(t.primaryKeys.length > 0) {
-      return {primary_key: t.primaryKeys}
-    }
-  }
-  return {primary_key: []};
 }
 
 /**
