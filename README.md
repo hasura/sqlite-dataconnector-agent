@@ -11,9 +11,16 @@ This directory contains an SQLite implementation of a data connector agent.
 
 ## Build & Run
 
+```sh
+npm install
+npm run build
+npm run start
 ```
-> npm install
-> npm start
+
+Or a simple dev-loop via `entr`:
+
+```sh
+echo src/**/*.ts | xargs -n1 echo | DB_READONLY=y entr -r npm run start
 ```
 
 ## Options / Environment Variables
@@ -48,7 +55,9 @@ You will want to mount a volume with your database(s) so that they can be refere
 
 # Dataset
 
-The dataset used for testing the reference agent is sourced from https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
+The dataset used for testing the reference agent is sourced from:
+
+* https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
 
 # Testing Changes to the Agent
 
@@ -82,13 +91,37 @@ From the HGE repo.
 * [x] Make escapeSQL global to the query module
 * [x] Make CORS permissions configurable
 * [x] Optional DB Allowlist
-* [ ] Fix SDK Test suite to be more flexible about descriptions
+* [x] Fix SDK Test suite to be more flexible about descriptions
 * [x] READONLY option
 * [x] CREATE option
 * [x] Don't create DB option
 * [ ] Verbosity settings
 * [x] Cache settings
 * [x] Missing WHERE clause from object relationships
+* [ ] Reuse `find_table_relationship` in more scenarios
+* [x] Check that looped exist check doesn't cause name conflicts
+* [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`, Example:
+    sqlite> create table test(testid string);
+    sqlite> .schema
+    CREATE TABLE test(testid string);
+    sqlite> select 1 where exists(select * from test where testid is null);
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    sqlite> select 1 where not exists(select * from test where testid is null);
+    1
+    sqlite> select 1 where not exists(select * from test where testid is not null);
+    1
+    sqlite> insert into test(testid) values('foo');
+    sqlite> insert into test(testid) values(NULL);
+    sqlite> select * from test;
+    foo
+
+    sqlite> select 1 where exists(select * from test where testid is null);
+    1
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    1
+    sqlite> select 1 where not exists(select * from test where testid is null);
+    sqlite> select 1 where exists(select * from test where testid is not null);
+    1
 
 # Known Bugs
 

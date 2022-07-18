@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap } from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -13,7 +13,7 @@ import {
     BinaryArrayComparisonOperator,
     OrderBy,
     QueryResponse,
-    Field, 
+    Field,
   } from "./types";
 
 const SqlString = require('sqlstring-sqlite');
@@ -62,25 +62,25 @@ function json_object(ts: Array<TableRelationships>, fields: Fields, table: strin
   return tag('json_object', `JSON_OBJECT(${result})`);
 }
 
-function relationship_where(w: Expression | null): Array<string> {
+function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: string): Array<string> {
   if(w == null) {
     return [];
   } else {
     switch(w.type) {
       case "not":
-        const aNot = relationship_where(w.expression);
+        const aNot = where_clause(ts, w.expression, t);
         if(aNot.length > 0) {
           return [`(NOT ${aNot})`];
         }
         break;
       case "and":
-        const aAnd = w.expressions.flatMap(relationship_where);
+        const aAnd = w.expressions.flatMap(x => where_clause(ts, x, t));
         if(aAnd.length > 0) {
           return [`(${aAnd.join(" AND ")})`];
         }
         break;
       case "or":
-        const aOr = w.expressions.flatMap(relationship_where);
+        const aOr = w.expressions.flatMap(x => where_clause(ts, x, t));
         if(aOr.length > 0) {
           return [`(${aOr.join(" OR ")})`];
         }
@@ -88,17 +88,86 @@ function relationship_where(w: Expression | null): Array<string> {
       case "unary_op":
         switch(w.operator) {
           case 'is_null':
-            return [`(${bop_col(w.column)} IS NULL)`]; // TODO: Could escape usnig bop_col if escape is threaded through.
+            if(w.column.path.length < 1) {
+              return [`(${escapeIdentifier(w.column.name)} IS NULL)`];
+            } else {
+              return [exists(ts, w.column, t, 'IS NULL')];
+            }
         }
       case "binary_op":
         const bop = bop_op(w.operator);
-        return [`${bop_col(w.column)} ${bop} ${bop_val(w.value)}`];
+        if(w.column.path.length < 1) {
+          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value, t)}`];
+        } else {
+          return [exists(ts, w.column, t, `${bop} ${bop_val(w.value, t)}`)];
+        }
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
-        return [`(${bop_col(w.column)} ${bopA} (${w.values.map(v => escapeString(v)).join(", ")}))`];
+        if(w.column.path.length < 1) {
+          return [`(${escapeIdentifier(w.column.name)} ${bopA} (${w.values.map(v => escapeString(v)).join(", ")}))`];
+        } else {
+          return [exists(ts,w.column,t, `${bopA} (${w.values.map(v => escapeString(v)).join(", ")})`)];
+        }
     }
     return [];
   }
+}
+
+function exists(ts: Array<TableRelationships>, c: ComparisonColumn, t: string, o: string): string {
+  // NOTE: An N suffix doesn't guarantee that conflicts are avoided.
+  const r = join_path(ts, t, c.path, 0);
+  const f = `FROM ${r.f.map(x => `${x.from} AS ${x.as}`).join(', ')}`;
+  return tag('exists',`EXISTS (SELECT 1 ${f} WHERE ${[...r.j, `${last(r.f).as}.${escapeIdentifier(c.name)} ${o}`].join(' AND ')})`);
+}
+
+/** Develops a from clause for an operation with a path - a relationship referenced column
+ * 
+ * Artist [Albums] Title
+ * FROM Album Album_PATH_XX ...
+ * WHERE Album_PATH_XX.ArtistId = Artist.ArtistId
+ * Album_PATH_XX.Title IS NULL
+ * 
+ * @param ts
+ * @param table 
+ * @param path
+ * @returns the from clause for the EXISTS query
+ */
+function join_path(ts: TableRelationships[], table: string, path: Array<string>, l: number): {f: Array<{from: string, as: string}>, j: string[]} {
+  const r = find_table_relationship(ts, table);
+  if(path.length < 1) {
+    return {f: [], j: []};
+  } else if(r == null) {
+    throw new Error(`Couldn't find relationship ${ts}, ${table} - This shouldn't happen.`);
+  } else {
+    const x = r.relationships[path[0]];
+    const n = join_path(ts, x.target_table, path.slice(1), l+1);
+    const m = omap(x.column_mapping, (k,v) => `${lev(l-1,table)}.${escapeIdentifier(k)} = ${lev(l, x.target_table)}.${escapeIdentifier(v)}`).join(' AND ');
+    return {f: [{from: escapeIdentifier(x.target_table), as: lev(l, x.target_table)}, ...n.f], j: [m, ...n.j]};
+  }
+}
+
+function lev(n: number, q:string): string {
+  if(n < 0) {
+    return escapeIdentifier(q);
+  } else {
+    return escapeIdentifier(`${q}_${n}`);
+  }
+}
+
+/**
+ * 
+ * @param ts Array of Table Relationships
+ * @param t Table Name
+ * @returns Relationships matching table-name
+ */
+function find_table_relationship(ts: Array<TableRelationships>, t: string): (TableRelationships | null) {
+  for(var i = 0; i < ts.length; i++) {
+    const r = ts[i];
+    if(r.source_table === t) {
+      return r;
+    }
+  }
+  return null;
 }
 
 function array_relationship(
@@ -119,7 +188,7 @@ function array_relationship(
           FROM (
             SELECT ${json_object(ts, fields, table)} AS j
             FROM ${escapeIdentifier(table)}
-            ${where(wWhere, wJoin)}
+            ${where(ts, wWhere, wJoin, table)}
             ${limit(wLimit)}
             ${offset(wOffset)}
           ))`);
@@ -135,7 +204,7 @@ function array_relationship(
             FROM (
               SELECT *
               FROM ${escapeIdentifier(table)}
-              ${where(wWhere, wJoin)}
+              ${where(ts, wWhere, wJoin, table)}
               ${order(wOrder)}
               ${limit(wLimit)}
               ${offset(wOffset)}
@@ -154,7 +223,7 @@ function object_relationship(
       return tag('object_relationship',`(
         SELECT ${json_object(ts, fields, table)} AS j
         FROM ${table}
-        ${where(null, wJoin)}
+        ${where(ts, null, wJoin, table)}
       )`);
 }
 
@@ -187,11 +256,12 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
   }
 }
 
-function bop_col(c: ComparisonColumn): string {
+// TODO: There is a bug in this implementation where vals can reference columns with paths.
+function bop_col(c: ComparisonColumn, t: string): string {
   if(c.path.length < 1) {
-    return tag('bop_col',escapeIdentifier(c.name));
+    return tag('bop_col', `${escapeIdentifier(t)}.${escapeIdentifier(c.name)}`);
   } else {
-    return tag('bop_col',c.path.map(escapeIdentifier).join(".") + "." + escapeIdentifier(c.name));
+    throw new Error(`bop_col shouldn't be handling paths.`);
   }
 }
 
@@ -213,9 +283,9 @@ function bop_op(o: BinaryComparisonOperator): string {
   return tag('bop_op',result);
 }
 
-function bop_val(v: ComparisonValue): string {
+function bop_val(v: ComparisonValue, t: string): string {
   switch(v.type) {
-    case "column": return tag('bop_val', bop_col(v.column));
+    case "column": return tag('bop_val', bop_col(v.column, t));
     case "scalar": return tag('bop_val', escapeString(v.value));
   }
 }
@@ -229,12 +299,12 @@ function order(o: Array<OrderBy>): string {
 }
 
 /**
- * @param whereArray Expressions used in the associated where clause
+ * @param whereExpression Nested expression used in the associated where clause
  * @param joinArray Join clauses
  * @returns string representing the combined where clause
  */ 
-function where(whereArray: Expression | null, joinArray: Array<string>,): string {
-  const clauses = [...relationship_where(whereArray), ...joinArray];
+function where(ts: Array<TableRelationships>, whereExpression: Expression | null, joinArray: Array<string>, t:string): string {
+  const clauses = [...where_clause(ts, whereExpression, t), ...joinArray];
   if(clauses.length < 1) {
     return "";
   } else {
