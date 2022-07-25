@@ -186,7 +186,7 @@ function array_relationship(
       // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
         return tag('array_relationship',`(
-          SELECT JSON_GROUP_ARRAY(j)
+          SELECT JSON_OBJECT('rows', JSON_GROUP_ARRAY(j))
           FROM (
             SELECT ${json_object(ts, fields, table)} AS j
             FROM ${escapeIdentifier(table)}
@@ -200,7 +200,7 @@ function array_relationship(
         // There seems to be a bug in SQLite where an ORDER clause in this position causes ARRAY_RELATIONSHIP
         // to return rows as JSON strings instead of JSON objects. This is worked around by using a subselect.
         return tag('array_relationship',`(
-          SELECT JSON_GROUP_ARRAY(j)
+          SELECT JSON_OBJECT('rows', JSON_GROUP_ARRAY(j))
           FROM (
             SELECT ${json_object(ts, fields, table)} AS j
             FROM (
@@ -223,7 +223,7 @@ function object_relationship(
   ): string {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       return tag('object_relationship',`(
-        SELECT ${json_object(ts, fields, table)} AS j
+        SELECT JSON_OBJECT('rows', JSON_ARRAY(${json_object(ts, fields, table)})) AS j
         FROM ${table}
         ${where(ts, null, wJoin, table)}
       )`);
