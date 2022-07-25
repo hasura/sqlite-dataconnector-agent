@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export type { Aggregate } from './models/Aggregate';
 export type { AndExpression } from './models/AndExpression';
 export type { AnotherColumnComparison } from './models/AnotherColumnComparison';
 export type { ApplyBinaryArrayComparisonExpression } from './models/ApplyBinaryArrayComparisonExpression';
@@ -12,7 +13,9 @@ export type { BinaryComparisonOperator } from './models/BinaryComparisonOperator
 export type { BooleanOperators } from './models/BooleanOperators';
 export type { Capabilities } from './models/Capabilities';
 export type { CapabilitiesResponse } from './models/CapabilitiesResponse';
+export type { ColumnCountAggregate } from './models/ColumnCountAggregate';
 export type { ColumnField } from './models/ColumnField';
+export type { ColumnFieldValue } from './models/ColumnFieldValue';
 export type { ColumnInfo } from './models/ColumnInfo';
 export type { ComparisonColumn } from './models/ComparisonColumn';
 export type { ComparisonOperators } from './models/ComparisonOperators';
@@ -23,6 +26,7 @@ export type { Field } from './models/Field';
 export type { FilteringCapabilities } from './models/FilteringCapabilities';
 export type { MutationCapabilities } from './models/MutationCapabilities';
 export type { NotExpression } from './models/NotExpression';
+export type { NullColumnFieldValue } from './models/NullColumnFieldValue';
 export type { OpenApiDiscriminator } from './models/OpenApiDiscriminator';
 export type { OpenApiExternalDocumentation } from './models/OpenApiExternalDocumentation';
 export type { OpenApiReference } from './models/OpenApiReference';
@@ -43,6 +47,9 @@ export type { ScalarType } from './models/ScalarType';
 export type { ScalarValue } from './models/ScalarValue';
 export type { ScalarValueComparison } from './models/ScalarValueComparison';
 export type { SchemaResponse } from './models/SchemaResponse';
+export type { SingleColumnAggregate } from './models/SingleColumnAggregate';
+export type { SingleColumnAggregateFunction } from './models/SingleColumnAggregateFunction';
+export type { StarCountAggregate } from './models/StarCountAggregate';
 export type { SubscriptionCapabilities } from './models/SubscriptionCapabilities';
 export type { TableInfo } from './models/TableInfo';
 export type { TableRelationships } from './models/TableRelationships';

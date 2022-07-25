@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last } from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -14,6 +14,7 @@ import {
     OrderBy,
     QueryResponse,
     Field,
+    ApplyBinaryComparisonOperator,
   } from "./types";
 
 const SqlString = require('sqlstring-sqlite');
@@ -94,12 +95,13 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
               return [exists(ts, w.column, t, 'IS NULL')];
             }
         }
-      case "binary_op":
+      case "binary_op": // TODO: This makes no sense...
+        const x = w as ApplyBinaryComparisonOperator; // TODO: Why does this need to be cast?
         const bop = bop_op(w.operator);
         if(w.column.path.length < 1) {
-          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value, t)}`];
+          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(x.value, t)}`];
         } else {
-          return [exists(ts, w.column, t, `${bop} ${bop_val(w.value, t)}`)];
+          return [exists(ts, w.column, t, `${bop} ${bop_val(x.value, t)}`)];
         }
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
@@ -239,7 +241,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
         ts,
         r.target_table,
         wJoin,
-        field.query.fields,
+        coerceUndefinedOrNullToEmptyRecord(field.query.fields),
       ));
 
     case 'array':
@@ -247,7 +249,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
         ts,
         r.target_table,
         wJoin,
-        field.query.fields,
+        coerceUndefinedOrNullToEmptyRecord(field.query.fields),
         coerceUndefinedToNull(field.query.where),
         coerceUndefinedToNull(field.query.limit),
         coerceUndefinedToNull(field.query.offset),
@@ -268,11 +270,12 @@ function bop_col(c: ComparisonColumn, t: string): string {
 function bop_array(o: BinaryArrayComparisonOperator): string {
   switch(o) {
     case 'in': return tag('bop_array','IN');
+    default: return tag('bop_array', o);
   }
 }
 
 function bop_op(o: BinaryComparisonOperator): string {
-  let result;
+  let result = o;
   switch(o) {
     case 'equal':                 result = "="; break;
     case 'greater_than':          result = ">"; break;
@@ -335,7 +338,7 @@ function query(request: QueryRequest): string {
     request.table_relationships,
     request.table,
     [],
-    request.query.fields,
+    coerceUndefinedOrNullToEmptyRecord(request.query.fields),
     coerceUndefinedToNull(request.query.where),
     coerceUndefinedToNull(request.query.limit),
     coerceUndefinedToNull(request.query.offset),

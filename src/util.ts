@@ -2,6 +2,8 @@
 
 export const coerceUndefinedOrNullToEmptyArray = <T>(v: Array<T> | undefined | null): Array<T> => v == null ? [] : v;
 
+export const coerceUndefinedOrNullToEmptyRecord = <K extends string | number | symbol, V>(v: Record<K,V> | undefined | null): Record<K,V> => v == null ? {} as Record<K,V> : v;
+
 export const unreachable = (x: never): never => { throw new Error(`Unreachable code reached! The types lied! 😭 Unexpected value: ${x}`) };
 
 export const zip = <T, U>(arr1: T[], arr2: U[]): [T,U][] => {
