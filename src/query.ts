@@ -94,8 +94,13 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
             } else {
               return [exists(ts, w.column, t, 'IS NULL')];
             }
+          default:
+            if(w.column.path.length < 1) {
+              return [`(${escapeIdentifier(w.column.name)} ${w.operator})`];
+            } else {
+              return [exists(ts, w.column, t, w.operator)];
+            }
         }
-        break;
       case "binary_op":
         const bop = bop_op(w.operator);
         if(w.column.path.length < 1) {
