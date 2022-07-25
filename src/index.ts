@@ -7,6 +7,7 @@ import { CapabilitiesResponse, capabilitiesResponse}   from './capabilities';
 import { connect }                                     from './db';
 import { stringToBool }                                from './util';
 import { QueryResponse, SchemaResponse, QueryRequest } from './types';
+import fs                                              from 'fs'
 
 const port = Number(process.env.PORT) || 8100;
 const server = Fastify({ logger: { prettyPrint: true } });
@@ -56,6 +57,13 @@ server.get("/health", async (request, response) => {
     }
   }
 });
+
+server.get("/swagger.json", async (request, response) => {
+  fs.readFile('src/types/agent.openapi.json', (err, fileBuffer) => {
+    response.type('application/json');
+    response.send(err || fileBuffer)
+  })
+})
 
 process.on('SIGINT', () => {
   server.log.info("interrupted");

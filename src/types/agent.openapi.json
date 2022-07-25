@@ -4,6 +4,9 @@
     "title": "",
     "version": ""
   },
+  "servers": [
+    {"url": "http://localhost:8100"}
+  ],
   "paths": {
     "/capabilities": {
       "get": {
