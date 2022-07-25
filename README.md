@@ -31,6 +31,7 @@ echo src/**/*.ts | xargs -n1 echo | DB_READONLY=y entr -r npm run start
 * ENV: `DB_READONLY={1|true|yes}` - Makes databases readonly, they are read-write by default.
 * ENV: `DB_ALLOW_LIST=DB1[,DB2]*` - Restrict what databases can be connected to.
 * ENV: `DB_PRIVATECACHE` - Keep caches between connections private. Shared by default.
+* ENV: `DEBUGGING_TAGS` - Outputs xml style tags in query comments for deugging purposes.
 
 ## Agent usage
 

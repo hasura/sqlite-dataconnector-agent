@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord } from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord, stringToBool } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -95,13 +95,13 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
               return [exists(ts, w.column, t, 'IS NULL')];
             }
         }
-      case "binary_op": // TODO: This makes no sense...
-        const x = w as ApplyBinaryComparisonOperator; // TODO: Why does this need to be cast?
+        break;
+      case "binary_op":
         const bop = bop_op(w.operator);
         if(w.column.path.length < 1) {
-          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(x.value, t)}`];
+          return [`${escapeIdentifier(w.column.name)} ${bop} ${bop_val(w.value, t)}`];
         } else {
-          return [exists(ts, w.column, t, `${bop} ${bop_val(x.value, t)}`)];
+          return [exists(ts, w.column, t, `${bop} ${bop_val(w.value, t)}`)];
         }
       case "binary_arr_op":
         const bopA = bop_array(w.operator);
@@ -355,12 +355,17 @@ function output(rows: any): QueryResponse {
   return JSON.parse(rows[0].data);
 }
 
+const DEBUGGING_TAGS = stringToBool(process.env['DEBUGGING_TAGS']);
 /** Function to add SQL comments to the generated SQL to tag which procedures generated what text.
  * 
  * comment('a','b') => '/*\<a>\*\/ b /*\</a>*\/'
  */
 function tag(t: string, s: string): string {
-  return `/*<${t}>*/ ${s} /*</${t}>*/`;
+  if(DEBUGGING_TAGS) {
+    return `/*<${t}>*/ ${s} /*</${t}>*/`;
+  } else {
+    return s;
+  }
 }
 
 /** Performs a query and returns results
