@@ -195,25 +195,28 @@ function aggregates_query(
     ts: Array<TableRelationships>,
     aggregates: Aggregates,
     wJoin: Array<string>,
+    wWhere: Expression | null,
+    wLimit: number | null,
+    wOffset: number | null,
+    wOrder: Array<OrderBy>,
     table: string
   ): Array<string> {
     if(isEmptyObject(aggregates)) {
       return [];
     } else {
-      const innerFrom = `${table} ${where(ts, null, wJoin, table)}`;
       const aggregate_pairs = omap(aggregates, (k,v) => {
         switch(v.type) {
           case 'star_count':
-            return `${escapeString(k)}, (SELECT COUNT(*) FROM ${innerFrom})`;
+            return `${escapeString(k)}, COUNT(*)`;
           case 'column_count':
             if(v.columns.length == 0) {
               throw new Error(`At least one column must be specified for a COUNT operation.`);
             } else if(v.columns.length == 1) {
               const c = v.columns[0];
               if(v.distinct) {
-                return `${escapeString(k)}, (SELECT COUNT(DISTINCT ${escapeIdentifier(c)}) FROM ${innerFrom})`;
+                return `${escapeString(k)}, COUNT(DISTINCT ${escapeIdentifier(c)})`;
               } else {
-                return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) FROM ${innerFrom})`;
+                return `${escapeString(k)}, COUNT(${escapeIdentifier(c)})`;
               }
             } else {
               // Note: Multiple column counts are not supported by SQLite:
@@ -221,12 +224,13 @@ function aggregates_query(
               throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
             }
           case 'single_column':
-            // TODO: Check if the SQLite function is supported.
-            return `${escapeString(k)}, (SELECT ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)}) FROM ${innerFrom})`;
+            return `${escapeString(k)}, ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)})`;
         }
       }).join(', ');
 
-      return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
+      const innerFrom = `${table} ${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
+
+      return [`'aggregates', (SELECT JSON_OBJECT(${aggregate_pairs}) FROM ${innerFrom})`]
     }
 }
 
@@ -241,7 +245,7 @@ function array_relationship(
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
-    const aggregateSelect = aggregates_query(ts, aggregates, wJoin, table);
+    const aggregateSelect = aggregates_query(ts, aggregates, wJoin, wWhere, wLimit, wOffset, wOrder, table);
     const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
     const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
@@ -250,8 +254,8 @@ function array_relationship(
         const innerFrom = `${where(ts, wWhere, wJoin, table)} ${limit(wLimit)} ${offset(wOffset)}`;
         return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom})`;
       } else {
-        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
-        const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFrom}`;
+        const innerFromClauses = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
+        const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFromClauses}`;
         return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table})`;
       }
     })()
