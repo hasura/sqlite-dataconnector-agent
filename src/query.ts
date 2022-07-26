@@ -179,6 +179,19 @@ function find_table_relationship(ts: Array<TableRelationships>, t: string): (Tab
   return null;
 }
 
+function cast_aggregate_function(f: string): string {
+  switch(f) {
+    case 'avg':
+    case 'max':
+    case 'min':
+    case 'sum':
+    case 'total':
+      return f;
+    default:
+      throw new Error(`Aggregate function ${f} is not supported by SQLite. See: https://www.sqlite.org/lang_aggfunc.html`);
+  }
+}
+
 function aggregates_query(aggregates: Aggregates, table: string): Array<string> {
   if(isEmptyObject(aggregates)) {
     return [];
@@ -204,7 +217,7 @@ function aggregates_query(aggregates: Aggregates, table: string): Array<string> 
           }
         case 'single_column':
           // TODO: Check if the SQLite function is supported.
-          return `${escapeString(k)}, (SELECT ${v.function}(${escapeIdentifier(v.column)}) from ${escapeIdentifier(table)})`;
+          return `${escapeString(k)}, (SELECT ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)}) from ${escapeIdentifier(table)})`;
       }
     }).join(', ');
 
