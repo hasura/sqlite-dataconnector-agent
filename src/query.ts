@@ -179,6 +179,27 @@ function find_table_relationship(ts: Array<TableRelationships>, t: string): (Tab
   return null;
 }
 
+function aggregates_query(aggregates: Aggregates): Array<string> {
+  if(isEmptyObject(aggregates)) {
+    return [];
+  } else {
+    const aggregate_pairs = omap(aggregates, (k,v) => {
+      switch(v.type) {
+        case 'star_count':
+          // TODO: Implement star_count aggregate
+          return `${escapeString(k)}, 99`;
+        case 'column_count':
+          // TODO: Implement column_count aggregate
+          return `${escapeString(k)}, 99`;
+        case 'single_column':
+          // TODO: Implement single_column aggregate
+          return `${escapeString(k)}, 99`;
+      }
+    }).join(', ');
+    return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
+  }
+}
+
 function array_relationship(
     ts: Array<TableRelationships>,
     table: string,
@@ -190,22 +211,22 @@ function array_relationship(
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
+    const aggregateSelect = aggregates_query(aggregates);
     const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
-    const aggregateSelect = isEmptyObject(aggregates) ? [] : [`'aggregates', JSON_OBJECT('aggregate_count', 99)`];
     const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
         const innerFrom = `${where(ts, wWhere, wJoin, table)} ${limit(wLimit)} ${offset(wOffset)}`;
-        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom} )`;
+        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom})`;
       } else {
         const innerFrom = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
         const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFrom}`;
-        return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table}) `;
+        return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table})`;
       }
     })()
 
-    return tag('array_relationship',`(SELECT JSON_OBJECT(${[...fieldSelect, ...aggregateSelect].join(', ')}) ${fieldFrom} )`);
+    return tag('array_relationship',`(SELECT JSON_OBJECT(${[...fieldSelect, ...aggregateSelect].join(', ')}) ${fieldFrom})`);
 }
 
 function object_relationship(
