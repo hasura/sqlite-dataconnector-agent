@@ -201,8 +201,6 @@ function aggregates_query(aggregates: Aggregates, table: string): Array<string> 
         case 'star_count':
           return `${escapeString(k)}, (SELECT COUNT(*) FROM ${escapeIdentifier(table)})`;
         case 'column_count':
-          // Note: Multiple column counts are not supported by SQLite:
-          // https://www.sqlite.org/lang_aggfunc.html#count
           if(v.columns.length == 0) {
             throw new Error(`At least one column must be specified for a COUNT operation.`);
           } else if(v.columns.length == 1) {
@@ -213,6 +211,8 @@ function aggregates_query(aggregates: Aggregates, table: string): Array<string> 
               return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
             }
           } else {
+            // Note: Multiple column counts are not supported by SQLite:
+            // https://www.sqlite.org/lang_aggfunc.html#count
             throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
           }
         case 'single_column':
