@@ -191,37 +191,43 @@ function cast_aggregate_function(f: string): string {
   }
 }
 
-function aggregates_query(aggregates: Aggregates, table: string): Array<string> {
-  if(isEmptyObject(aggregates)) {
-    return [];
-  } else {
-    const aggregate_pairs = omap(aggregates, (k,v) => {
-      switch(v.type) {
-        case 'star_count':
-          return `${escapeString(k)}, (SELECT COUNT(*) FROM ${escapeIdentifier(table)})`;
-        case 'column_count':
-          if(v.columns.length == 0) {
-            throw new Error(`At least one column must be specified for a COUNT operation.`);
-          } else if(v.columns.length == 1) {
-            const c = v.columns[0];
-            if(v.distinct) {
-              return `${escapeString(k)}, (SELECT COUNT(DISTINCT ${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+function aggregates_query(
+    ts: Array<TableRelationships>,
+    aggregates: Aggregates,
+    wJoin: Array<string>,
+    table: string
+  ): Array<string> {
+    if(isEmptyObject(aggregates)) {
+      return [];
+    } else {
+      const innerFrom = `${table} ${where(ts, null, wJoin, table)}`;
+      const aggregate_pairs = omap(aggregates, (k,v) => {
+        switch(v.type) {
+          case 'star_count':
+            return `${escapeString(k)}, (SELECT COUNT(*) FROM ${innerFrom})`;
+          case 'column_count':
+            if(v.columns.length == 0) {
+              throw new Error(`At least one column must be specified for a COUNT operation.`);
+            } else if(v.columns.length == 1) {
+              const c = v.columns[0];
+              if(v.distinct) {
+                return `${escapeString(k)}, (SELECT COUNT(DISTINCT ${escapeIdentifier(c)}) FROM ${innerFrom})`;
+              } else {
+                return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) FROM ${innerFrom})`;
+              }
             } else {
-              return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+              // Note: Multiple column counts are not supported by SQLite:
+              // https://www.sqlite.org/lang_aggfunc.html#count
+              throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
             }
-          } else {
-            // Note: Multiple column counts are not supported by SQLite:
-            // https://www.sqlite.org/lang_aggfunc.html#count
-            throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
-          }
-        case 'single_column':
-          // TODO: Check if the SQLite function is supported.
-          return `${escapeString(k)}, (SELECT ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)}) from ${escapeIdentifier(table)})`;
-      }
-    }).join(', ');
+          case 'single_column':
+            // TODO: Check if the SQLite function is supported.
+            return `${escapeString(k)}, (SELECT ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)}) FROM ${innerFrom})`;
+        }
+      }).join(', ');
 
-    return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
-  }
+      return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
+    }
 }
 
 function array_relationship(
@@ -235,7 +241,7 @@ function array_relationship(
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
-    const aggregateSelect = aggregates_query(aggregates, table);
+    const aggregateSelect = aggregates_query(ts, aggregates, wJoin, table);
     const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
     const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
@@ -260,7 +266,7 @@ function object_relationship(
     fields: Fields,
   ): string {
       // NOTE: The order of table prefixes are from "parent" to "child".
-      const innerFrom = `${table} ${where(ts, null, wJoin, table)}`;
+      const innerFrom = `${escapeIdentifier(table)} ${where(ts, null, wJoin, table)}`;
       return tag('object_relationship',
         `(SELECT JSON_OBJECT('rows', JSON_ARRAY(${json_object(ts, fields, table)})) AS j FROM ${innerFrom})`);
 }
