@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last } from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord, stringToBool, logDeep, isEmptyObject } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -14,6 +14,7 @@ import {
     OrderBy,
     QueryResponse,
     Field,
+    Aggregate,
   } from "./types";
 
 const SqlString = require('sqlstring-sqlite');
@@ -21,6 +22,7 @@ const SqlString = require('sqlstring-sqlite');
 /** Helper type for convenience. Uses the sqlstring-sqlite library, but should ideally use the function in sequalize.
  */
 type Fields = Record<string, Field>
+type Aggregates = Record<string, Aggregate>
 
 function escapeString(x: any): string {
   return SqlString.escape(x);
@@ -93,6 +95,12 @@ function where_clause(ts: Array<TableRelationships>, w: Expression | null, t: st
             } else {
               return [exists(ts, w.column, t, 'IS NULL')];
             }
+          default:
+            if(w.column.path.length < 1) {
+              return [`(${escapeIdentifier(w.column.name)} ${w.operator})`];
+            } else {
+              return [exists(ts, w.column, t, w.operator)];
+            }
         }
       case "binary_op":
         const bop = bop_op(w.operator);
@@ -128,7 +136,7 @@ function exists(ts: Array<TableRelationships>, c: ComparisonColumn, t: string, o
  * Album_PATH_XX.Title IS NULL
  * 
  * @param ts
- * @param table 
+ * @param table
  * @param path
  * @returns the from clause for the EXISTS query
  */
@@ -170,47 +178,79 @@ function find_table_relationship(ts: Array<TableRelationships>, t: string): (Tab
   return null;
 }
 
+function cast_aggregate_function(f: string): string {
+  switch(f) {
+    case 'avg':
+    case 'max':
+    case 'min':
+    case 'sum':
+    case 'total':
+      return f;
+    default:
+      throw new Error(`Aggregate function ${f} is not supported by SQLite. See: https://www.sqlite.org/lang_aggfunc.html`);
+  }
+}
+
+function aggregates_query(aggregates: Aggregates, table: string): Array<string> {
+  if(isEmptyObject(aggregates)) {
+    return [];
+  } else {
+    const aggregate_pairs = omap(aggregates, (k,v) => {
+      switch(v.type) {
+        case 'star_count':
+          return `${escapeString(k)}, (SELECT COUNT(*) FROM ${escapeIdentifier(table)})`;
+        case 'column_count':
+          if(v.columns.length == 0) {
+            throw new Error(`At least one column must be specified for a COUNT operation.`);
+          } else if(v.columns.length == 1) {
+            const c = v.columns[0];
+            if(v.distinct) {
+              return `${escapeString(k)}, (SELECT COUNT(DISTINCT ${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+            } else {
+              return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+            }
+          } else {
+            // Note: Multiple column counts are not supported by SQLite:
+            // https://www.sqlite.org/lang_aggfunc.html#count
+            throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
+          }
+        case 'single_column':
+          // TODO: Check if the SQLite function is supported.
+          return `${escapeString(k)}, (SELECT ${cast_aggregate_function(v.function)}(${escapeIdentifier(v.column)}) from ${escapeIdentifier(table)})`;
+      }
+    }).join(', ');
+
+    return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
+  }
+}
+
 function array_relationship(
     ts: Array<TableRelationships>,
     table: string,
     wJoin: Array<string>,
     fields: Fields,
+    aggregates: Aggregates,
     wWhere: Expression | null,
     wLimit: number | null,
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
+    const aggregateSelect = aggregates_query(aggregates, table);
+    const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
+    const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
-        return tag('array_relationship',`(
-          SELECT JSON_GROUP_ARRAY(j)
-          FROM (
-            SELECT ${json_object(ts, fields, table)} AS j
-            FROM ${escapeIdentifier(table)}
-            ${where(ts, wWhere, wJoin, table)}
-            ${limit(wLimit)}
-            ${offset(wOffset)}
-          ))`);
+        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${limit(wLimit)} ${offset(wOffset)}`;
+        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom})`;
       } else {
-        // NOTE: Rationale for subselect in FROM clause:
-        // 
-        // There seems to be a bug in SQLite where an ORDER clause in this position causes ARRAY_RELATIONSHIP
-        // to return rows as JSON strings instead of JSON objects. This is worked around by using a subselect.
-        return tag('array_relationship',`(
-          SELECT JSON_GROUP_ARRAY(j)
-          FROM (
-            SELECT ${json_object(ts, fields, table)} AS j
-            FROM (
-              SELECT *
-              FROM ${escapeIdentifier(table)}
-              ${where(ts, wWhere, wJoin, table)}
-              ${order(wOrder)}
-              ${limit(wLimit)}
-              ${offset(wOffset)}
-            ) AS ${table}
-          ))`);
+        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
+        const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFrom}`;
+        return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table})`;
       }
+    })()
+
+    return tag('array_relationship',`(SELECT JSON_OBJECT(${[...fieldSelect, ...aggregateSelect].join(', ')}) ${fieldFrom})`);
 }
 
 function object_relationship(
@@ -219,12 +259,10 @@ function object_relationship(
     wJoin: Array<string>,
     fields: Fields,
   ): string {
-      // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
-      return tag('object_relationship',`(
-        SELECT ${json_object(ts, fields, table)} AS j
-        FROM ${table}
-        ${where(ts, null, wJoin, table)}
-      )`);
+      // NOTE: The order of table prefixes are from "parent" to "child".
+      const innerFrom = `${table} ${where(ts, null, wJoin, table)}`;
+      return tag('object_relationship',
+        `(SELECT JSON_OBJECT('rows', JSON_ARRAY(${json_object(ts, fields, table)})) AS j FROM ${innerFrom})`);
 }
 
 function relationship(ts: Array<TableRelationships>, r: Relationship, field: RelationshipField, table: string): string {
@@ -239,7 +277,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
         ts,
         r.target_table,
         wJoin,
-        field.query.fields,
+        coerceUndefinedOrNullToEmptyRecord(field.query.fields),
       ));
 
     case 'array':
@@ -247,7 +285,8 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
         ts,
         r.target_table,
         wJoin,
-        field.query.fields,
+        coerceUndefinedOrNullToEmptyRecord(field.query.fields),
+        coerceUndefinedOrNullToEmptyRecord(field.query.aggregates),
         coerceUndefinedToNull(field.query.where),
         coerceUndefinedToNull(field.query.limit),
         coerceUndefinedToNull(field.query.offset),
@@ -268,11 +307,12 @@ function bop_col(c: ComparisonColumn, t: string): string {
 function bop_array(o: BinaryArrayComparisonOperator): string {
   switch(o) {
     case 'in': return tag('bop_array','IN');
+    default: return tag('bop_array', o);
   }
 }
 
 function bop_op(o: BinaryComparisonOperator): string {
-  let result;
+  let result = o;
   switch(o) {
     case 'equal':                 result = "="; break;
     case 'greater_than':          result = ">"; break;
@@ -335,7 +375,8 @@ function query(request: QueryRequest): string {
     request.table_relationships,
     request.table,
     [],
-    request.query.fields,
+    coerceUndefinedOrNullToEmptyRecord(request.query.fields),
+    coerceUndefinedOrNullToEmptyRecord(request.query.aggregates),
     coerceUndefinedToNull(request.query.where),
     coerceUndefinedToNull(request.query.limit),
     coerceUndefinedToNull(request.query.offset),
@@ -352,12 +393,17 @@ function output(rows: any): QueryResponse {
   return JSON.parse(rows[0].data);
 }
 
+const DEBUGGING_TAGS = stringToBool(process.env['DEBUGGING_TAGS']);
 /** Function to add SQL comments to the generated SQL to tag which procedures generated what text.
  * 
  * comment('a','b') => '/*\<a>\*\/ b /*\</a>*\/'
  */
 function tag(t: string, s: string): string {
-  return `/*<${t}>*/ ${s} /*</${t}>*/`;
+  if(DEBUGGING_TAGS) {
+    return `/*<${t}>*/ ${s} /*</${t}>*/`;
+  } else {
+    return s;
+  }
 }
 
 /** Performs a query and returns results

@@ -4,6 +4,9 @@
     "title": "",
     "version": ""
   },
+  "servers": [
+    {"url": "http://localhost:8100"}
+  ],
   "paths": {
     "/capabilities": {
       "get": {
@@ -592,13 +595,61 @@
         "type": "object"
       },
       "QueryResponse": {
-        "items": {
-          "additionalProperties": {
-            "additionalProperties": true
+        "properties": {
+          "aggregates": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScalarValue"
+            },
+            "description": "The results of the aggregates returned by the query",
+            "nullable": true,
+            "type": "object"
           },
-          "type": "object"
+          "rows": {
+            "description": "The rows returned by the query, corresponding to the query's fields",
+            "items": {
+              "additionalProperties": {
+                "additionalProperties": true,
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ColumnFieldValue"
+                  },
+                  {
+                    "$ref": "#/components/schemas/QueryResponse"
+                  },
+                  {
+                    "$ref": "#/components/schemas/NullColumnFieldValue"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "nullable": true,
+            "type": "array"
+          }
         },
-        "type": "array"
+        "type": "object"
+      },
+      "ColumnFieldValue": {
+        "additionalProperties": true
+      },
+      "NullColumnFieldValue": {
+        "type": "null"
+      },
+      "ScalarValue": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "QueryRequest": {
         "properties": {
@@ -677,11 +728,20 @@
       },
       "Query": {
         "properties": {
+          "aggregates": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Aggregate"
+            },
+            "description": "Aggregate fields of the query",
+            "nullable": true,
+            "type": "object"
+          },
           "fields": {
             "additionalProperties": {
               "$ref": "#/components/schemas/Field"
             },
             "description": "Fields of the query",
+            "nullable": true,
             "type": "object"
           },
           "limit": {
@@ -710,9 +770,6 @@
             "$ref": "#/components/schemas/Expression"
           }
         },
-        "required": [
-          "fields"
-        ],
         "type": "object"
       },
       "ColumnField": {
@@ -766,6 +823,96 @@
           }
         ]
       },
+      "SingleColumnAggregateFunction": {
+        "enum": [
+          "avg",
+          "max",
+          "min",
+          "stddev_pop",
+          "stddev_samp",
+          "sum",
+          "var_pop",
+          "var_samp"
+        ],
+        "type": "string"
+      },
+      "ColumnCountAggregate": {
+        "properties": {
+          "columns": {
+            "description": "The columns to apply the count aggregate function to",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "distinct": {
+            "description": "Whether or not only distinct items should be counted",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "column_count"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "columns",
+          "distinct"
+        ],
+        "type": "object"
+      },
+      "StarCountAggregate": {
+        "properties": {
+          "type": {
+            "enum": [
+              "star_count"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "SingleColumnAggregate": {
+        "properties": {
+          "column": {
+            "description": "The column to apply the aggregation function to",
+            "type": "string"
+          },
+          "function": {
+            "$ref": "#/components/schemas/SingleColumnAggregateFunction"
+          },
+          "type": {
+            "enum": [
+              "single_column"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "function",
+          "column"
+        ],
+        "type": "object"
+      },
+      "Aggregate": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SingleColumnAggregate"
+          },
+          {
+            "$ref": "#/components/schemas/ColumnCountAggregate"
+          },
+          {
+            "$ref": "#/components/schemas/StarCountAggregate"
+          }
+        ]
+      },
       "Expression": {
         "oneOf": [
           {
@@ -789,14 +936,22 @@
         ]
       },
       "BinaryComparisonOperator": {
-        "enum": [
-          "less_than",
-          "less_than_or_equal",
-          "greater_than",
-          "greater_than_or_equal",
-          "equal"
-        ],
-        "type": "string"
+        "additionalProperties": true,
+        "anyOf": [
+          {
+            "enum": [
+              "less_than",
+              "less_than_or_equal",
+              "greater_than",
+              "greater_than_or_equal",
+              "equal"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ]
       },
       "ComparisonColumn": {
         "properties": {
@@ -817,22 +972,6 @@
           "name"
         ],
         "type": "object"
-      },
-      "ScalarValue": {
-        "oneOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "number"
-          },
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "null"
-          }
-        ]
       },
       "AnotherColumnComparison": {
         "properties": {
@@ -881,16 +1020,32 @@
         ]
       },
       "BinaryArrayComparisonOperator": {
-        "enum": [
-          "in"
-        ],
-        "type": "string"
+        "additionalProperties": true,
+        "anyOf": [
+          {
+            "enum": [
+              "in"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ]
       },
       "UnaryComparisonOperator": {
-        "enum": [
-          "is_null"
-        ],
-        "type": "string"
+        "additionalProperties": true,
+        "anyOf": [
+          {
+            "enum": [
+              "is_null"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ]
       },
       "ApplyBinaryArrayComparisonExpression": {
         "properties": {

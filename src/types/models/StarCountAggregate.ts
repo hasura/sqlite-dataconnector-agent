@@ -2,5 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export type BinaryArrayComparisonOperator = ('in' | string);
+export type StarCountAggregate = {
+  type: 'star_count';
+};
 
