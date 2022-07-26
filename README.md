@@ -101,6 +101,7 @@ From the HGE repo.
 * [x] Cache settings
 * [x] Missing WHERE clause from object relationships
 * [x] Reuse `find_table_relationship` in more scenarios
+* [ ] ORDER clause in aggregates breaks SQLite parser for some reason
 * [x] Check that looped exist check doesn't cause name conflicts
 * [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`, Example:
     sqlite> create table test(testid string);

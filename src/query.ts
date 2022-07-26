@@ -191,6 +191,16 @@ function cast_aggregate_function(f: string): string {
   }
 }
 
+/**
+ * Builds an Aggregate query expression.
+ * 
+ * NOTE: ORDER Clauses are currently broken due to SQLite parser issue.
+ * 
+ * @param table 
+ * @param aggregates 
+ * @param innerFromClauses 
+ * @returns 
+ */
 function aggregates_query(
     table: string,
     aggregates: Aggregates,
