@@ -96,10 +96,11 @@ From the HGE repo.
 * [x] READONLY option
 * [x] CREATE option
 * [x] Don't create DB option
-* [ ] Verbosity settings
+* [x] Aggregate queries
+* [x] Verbosity settings
 * [x] Cache settings
 * [x] Missing WHERE clause from object relationships
-* [ ] Reuse `find_table_relationship` in more scenarios
+* [x] Reuse `find_table_relationship` in more scenarios
 * [x] Check that looped exist check doesn't cause name conflicts
 * [ ] `NOT EXISTS IS NULL` != `EXISTS IS NOT NULL`, Example:
     sqlite> create table test(testid string);

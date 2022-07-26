@@ -14,7 +14,6 @@ import {
     OrderBy,
     QueryResponse,
     Field,
-    ApplyBinaryComparisonOperator,
     Aggregate,
   } from "./types";
 
