@@ -192,14 +192,9 @@ function cast_aggregate_function(f: string): string {
 }
 
 function aggregates_query(
-    ts: Array<TableRelationships>,
+    table: string,
     aggregates: Aggregates,
-    wJoin: Array<string>,
-    wWhere: Expression | null,
-    wLimit: number | null,
-    wOffset: number | null,
-    wOrder: Array<OrderBy>,
-    table: string
+    innerFromClauses: string,
   ): Array<string> {
     if(isEmptyObject(aggregates)) {
       return [];
@@ -228,9 +223,7 @@ function aggregates_query(
         }
       }).join(', ');
 
-      const innerFrom = `${table} ${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
-
-      return [`'aggregates', (SELECT JSON_OBJECT(${aggregate_pairs}) FROM ${innerFrom})`]
+      return [`'aggregates', (SELECT JSON_OBJECT(${aggregate_pairs}) FROM (SELECT * from ${escapeIdentifier(table)} ${innerFromClauses}))`]
     }
 }
 
@@ -245,16 +238,15 @@ function array_relationship(
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
-    const aggregateSelect = aggregates_query(ts, aggregates, wJoin, wWhere, wLimit, wOffset, wOrder, table);
-    const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
-    const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
+    const innerFromClauses = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
+    const aggregateSelect  = aggregates_query(table, aggregates, innerFromClauses);
+    const fieldSelect      = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
+    const fieldFrom        = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
-        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${limit(wLimit)} ${offset(wOffset)}`;
-        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom})`;
+        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFromClauses})`;
       } else {
-        const innerFromClauses = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
         const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFromClauses}`;
         return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table})`;
       }
