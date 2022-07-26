@@ -1,6 +1,6 @@
 ﻿import { Config }  from "./config";
 import { connect } from "./db";
-import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord, stringToBool } from "./util";
+import { coerceUndefinedOrNullToEmptyArray, coerceUndefinedToNull, omap, last, coerceUndefinedOrNullToEmptyRecord, stringToBool, logDeep, isEmptyObject } from "./util";
 import {
     Expression,
     BinaryComparisonOperator,
@@ -15,6 +15,7 @@ import {
     QueryResponse,
     Field,
     ApplyBinaryComparisonOperator,
+    Aggregate,
   } from "./types";
 
 const SqlString = require('sqlstring-sqlite');
@@ -22,6 +23,7 @@ const SqlString = require('sqlstring-sqlite');
 /** Helper type for convenience. Uses the sqlstring-sqlite library, but should ideally use the function in sequalize.
  */
 type Fields = Record<string, Field>
+type Aggregates = Record<string, Aggregate>
 
 function escapeString(x: any): string {
   return SqlString.escape(x);
@@ -135,7 +137,7 @@ function exists(ts: Array<TableRelationships>, c: ComparisonColumn, t: string, o
  * Album_PATH_XX.Title IS NULL
  * 
  * @param ts
- * @param table 
+ * @param table
  * @param path
  * @returns the from clause for the EXISTS query
  */
@@ -182,42 +184,28 @@ function array_relationship(
     table: string,
     wJoin: Array<string>,
     fields: Fields,
+    aggregates: Aggregates,
     wWhere: Expression | null,
     wLimit: number | null,
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
+    const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
+    const aggregateSelect = isEmptyObject(aggregates) ? [] : [`'aggregates', JSON_OBJECT('aggregate_count', 99)`];
+    const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
       // NOTE: The reuse of the 'j' identifier should be safe due to scoping. This is confirmed in testing.
       if(wOrder.length < 1) {
-        return tag('array_relationship',`(
-          SELECT JSON_OBJECT('rows', JSON_GROUP_ARRAY(j))
-          FROM (
-            SELECT ${json_object(ts, fields, table)} AS j
-            FROM ${escapeIdentifier(table)}
-            ${where(ts, wWhere, wJoin, table)}
-            ${limit(wLimit)}
-            ${offset(wOffset)}
-          ))`);
+        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${limit(wLimit)} ${offset(wOffset)}`;
+        return `FROM ( SELECT ${json_object(ts, fields, table)} AS j FROM ${escapeIdentifier(table)} ${innerFrom} )`;
       } else {
-        // NOTE: Rationale for subselect in FROM clause:
-        // 
-        // There seems to be a bug in SQLite where an ORDER clause in this position causes ARRAY_RELATIONSHIP
-        // to return rows as JSON strings instead of JSON objects. This is worked around by using a subselect.
-        return tag('array_relationship',`(
-          SELECT JSON_OBJECT('rows', JSON_GROUP_ARRAY(j))
-          FROM (
-            SELECT ${json_object(ts, fields, table)} AS j
-            FROM (
-              SELECT *
-              FROM ${escapeIdentifier(table)}
-              ${where(ts, wWhere, wJoin, table)}
-              ${order(wOrder)}
-              ${limit(wLimit)}
-              ${offset(wOffset)}
-            ) AS ${table}
-          ))`);
+        const innerFrom = `${where(ts, wWhere, wJoin, table)} ${order(wOrder)} ${limit(wLimit)} ${offset(wOffset)}`;
+        const innerSelect = `SELECT * FROM ${escapeIdentifier(table)} ${innerFrom}`;
+        return `FROM (SELECT ${json_object(ts, fields, table)} AS j FROM (${innerSelect}) AS ${table}) `;
       }
+    })()
+
+    return tag('array_relationship',`(SELECT JSON_OBJECT(${[...fieldSelect, ...aggregateSelect].join(', ')}) ${fieldFrom} )`);
 }
 
 function object_relationship(
@@ -226,12 +214,10 @@ function object_relationship(
     wJoin: Array<string>,
     fields: Fields,
   ): string {
-      // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
-      return tag('object_relationship',`(
-        SELECT JSON_OBJECT('rows', JSON_ARRAY(${json_object(ts, fields, table)})) AS j
-        FROM ${table}
-        ${where(ts, null, wJoin, table)}
-      )`);
+      // NOTE: The order of table prefixes are from "parent" to "child".
+      const innerFrom = `${table} ${where(ts, null, wJoin, table)}`;
+      return tag('object_relationship',
+        `(SELECT JSON_OBJECT('rows', JSON_ARRAY(${json_object(ts, fields, table)})) AS j FROM ${innerFrom})`);
 }
 
 function relationship(ts: Array<TableRelationships>, r: Relationship, field: RelationshipField, table: string): string {
@@ -255,6 +241,7 @@ function relationship(ts: Array<TableRelationships>, r: Relationship, field: Rel
         r.target_table,
         wJoin,
         coerceUndefinedOrNullToEmptyRecord(field.query.fields),
+        coerceUndefinedOrNullToEmptyRecord(field.query.aggregates),
         coerceUndefinedToNull(field.query.where),
         coerceUndefinedToNull(field.query.limit),
         coerceUndefinedToNull(field.query.offset),
@@ -344,6 +331,7 @@ function query(request: QueryRequest): string {
     request.table,
     [],
     coerceUndefinedOrNullToEmptyRecord(request.query.fields),
+    coerceUndefinedOrNullToEmptyRecord(request.query.aggregates),
     coerceUndefinedToNull(request.query.where),
     coerceUndefinedToNull(request.query.limit),
     coerceUndefinedToNull(request.query.offset),

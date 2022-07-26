@@ -35,3 +35,7 @@ export function logDeep(msg: string, myObject: any): void {
   const util = require('util');
   console.log(msg, util.inspect(myObject, {showHidden: true, depth: null, colors: true}));
 }
+
+export function isEmptyObject(obj: Record<string, any>): boolean {
+  return Object.keys(obj).length === 0;
+}
