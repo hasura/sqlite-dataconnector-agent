@@ -179,23 +179,35 @@ function find_table_relationship(ts: Array<TableRelationships>, t: string): (Tab
   return null;
 }
 
-function aggregates_query(aggregates: Aggregates): Array<string> {
+function aggregates_query(aggregates: Aggregates, table: string): Array<string> {
   if(isEmptyObject(aggregates)) {
     return [];
   } else {
     const aggregate_pairs = omap(aggregates, (k,v) => {
       switch(v.type) {
         case 'star_count':
-          // TODO: Implement star_count aggregate
-          return `${escapeString(k)}, 99`;
+          return `${escapeString(k)}, (SELECT COUNT(*) FROM ${escapeIdentifier(table)})`;
         case 'column_count':
-          // TODO: Implement column_count aggregate
-          return `${escapeString(k)}, 99`;
+          // Note: Multiple column counts are not supported by SQLite:
+          // https://www.sqlite.org/lang_aggfunc.html#count
+          if(v.columns.length == 0) {
+            throw new Error(`At least one column must be specified for a COUNT operation.`);
+          } else if(v.columns.length == 1) {
+            const c = v.columns[0];
+            if(v.distinct) {
+              return `${escapeString(k)}, (SELECT COUNT(DISTINCT ${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+            } else {
+              return `${escapeString(k)}, (SELECT COUNT(${escapeIdentifier(c)}) from ${escapeIdentifier(table)})`;
+            }
+          } else {
+            throw new Error(`SQLite does not support counts from multiple columns. See https://www.sqlite.org/lang_aggfunc.html#count`);
+          }
         case 'single_column':
-          // TODO: Implement single_column aggregate
-          return `${escapeString(k)}, 99`;
+          // TODO: Check if the SQLite function is supported.
+          return `${escapeString(k)}, (SELECT ${v.function}(${escapeIdentifier(v.column)}) from ${escapeIdentifier(table)})`;
       }
     }).join(', ');
+
     return [`'aggregates', JSON_OBJECT(${aggregate_pairs})`]
   }
 }
@@ -211,7 +223,7 @@ function array_relationship(
     wOffset: number | null,
     wOrder: Array<OrderBy>,
   ): string {
-    const aggregateSelect = aggregates_query(aggregates);
+    const aggregateSelect = aggregates_query(aggregates, table);
     const fieldSelect     = isEmptyObject(fields)     ? [] : [`'rows', JSON_GROUP_ARRAY(j)`];
     const fieldFrom       = isEmptyObject(fields)     ? '' : (() => {
       // NOTE: The order of table prefixes are currently assumed to be from "parent" to "child".
