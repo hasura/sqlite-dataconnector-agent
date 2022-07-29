@@ -5,8 +5,7 @@ It can use local SQLite database files as referenced by the "db" config field.
 
 ## Capabilities
 
-You should be able to get detailed metadata about the agent's capabilities by
-GETting the /capabilities endpoint of the running agent.
+The SQLite agent currently supports the following capabilities:
 
 * [x] GraphQL Schema
 * [x] GraphQL Queries
@@ -16,6 +15,9 @@ GETting the /capabilities endpoint of the running agent.
 * [ ] Exposing Foreign-Key Information
 * [ ] Subscriptions
 * [ ] Streaming Subscriptions
+
+Note: You are able to get detailed metadata about the agent's capabilities by
+`GET`ting the `/capabilities` endpoint of the running agent.
 
 ## Requirements
 
