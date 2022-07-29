@@ -1,6 +1,21 @@
 # Data Connector Agent for SQLite
 
 This directory contains an SQLite implementation of a data connector agent.
+It can use local SQLite database files as referenced by the "db" config field.
+
+## Capabilities
+
+You should be able to get detailed metadata about the agent's capabilities by
+GETting the /capabilities endpoint of the running agent.
+
+* [x] GraphQL Schema
+* [x] GraphQL Queries
+* [ ] GraphQL Mutations
+* [x] Relationships
+* [x] Aggregations
+* [ ] Exposing Foreign-Key Information
+* [ ] Subscriptions
+* [ ] Streaming Subscriptions
 
 ## Requirements
 
@@ -54,13 +69,13 @@ The schema is exposed via introspection, but you can limit which tables are refe
 
 You will want to mount a volume with your database(s) so that they can be referenced in configuration.
 
-# Dataset
+## Dataset
 
 The dataset used for testing the reference agent is sourced from:
 
 * https://raw.githubusercontent.com/lerocha/chinook-database/master/ChinookDatabase/DataSources/Chinook_Sqlite.sql
 
-# Testing Changes to the Agent
+## Testing Changes to the Agent
 
 Run:
 
@@ -70,8 +85,7 @@ cabal run graphql-engine:test:tests-dc-api -- test --agent-base-url http://local
 
 From the HGE repo.
 
-
-# TODO
+## TODO
 
 * [x] Health Check
 * [x] DB Specific Health Checks
