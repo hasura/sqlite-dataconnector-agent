@@ -39,3 +39,13 @@ export function logDeep(msg: string, myObject: any): void {
 export function isEmptyObject(obj: Record<string, any>): boolean {
   return Object.keys(obj).length === 0;
 }
+
+/**
+ * Usage: `await delay(5000)`
+ * 
+ * @param ms 
+ * @returns 
+ */
+export function delay(ms: number): Promise<void> {
+  return new Promise( resolve => setTimeout(resolve, ms) );
+}

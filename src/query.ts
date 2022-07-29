@@ -471,4 +471,3 @@ export async function queryData(config: Config, queryRequest: QueryRequest): Pro
 
   return output(result);
 }
-
