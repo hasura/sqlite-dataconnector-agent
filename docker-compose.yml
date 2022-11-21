@@ -1,0 +1,9 @@
+services:
+  agent:
+    image: sordina/foobar-2938ryweif:${AGENT_TAG}
+    volumes:
+      - ./test/db.chinook.sqlite:/db.chinook.sqlite
+    ports:
+      - "8100:8100"
+    environment:
+      PORT: 8100
