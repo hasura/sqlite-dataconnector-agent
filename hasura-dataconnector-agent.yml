@@ -1,0 +1,4 @@
+---
+
+container: "hasura/sqlite-dataconnector-agent"
+agent-service: "sqlite-agent"
