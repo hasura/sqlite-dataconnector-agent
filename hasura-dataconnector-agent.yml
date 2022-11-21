@@ -2,3 +2,5 @@
 
 container: "hasura/sqlite-dataconnector-agent"
 agent-service: "sqlite-agent"
+test-suite: hasura/dc-agent-tests:v2.15.1
+
