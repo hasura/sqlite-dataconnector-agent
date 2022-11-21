@@ -2,6 +2,8 @@
 
 # container: "hasura/sqlite-dataconnector-agent"
 container: sordina/foobar-2938ryweif
-agent-service: "sqlite-agent"
 test-suite: hasura/dc-agent-tests:v2.15.1
+agent-service: sqlite-agent
+agent-config:
+  db: ./test/db.chinook.sqlite
 
