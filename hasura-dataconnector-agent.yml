@@ -5,5 +5,5 @@ container: sordina/foobar-2938ryweif
 test-suite: hasura/dc-agent-tests:v2.15.1
 agent-service: sqlite-agent
 agent-config:
-  db: ./test/db.chinook.sqlite
+  db: ./db.chinook.sqlite
 
